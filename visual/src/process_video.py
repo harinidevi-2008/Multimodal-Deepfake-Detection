@@ -1,4 +1,5 @@
 import os
+import time
 import numpy as np
 from tqdm import tqdm
 
@@ -6,67 +7,90 @@ from extract_frames import extract_frames
 from face_detector import get_aligned_face
 from feature_extractor import get_feature_vector
 
+# -----------------------------
+# Folder Paths
+# -----------------------------
+VIDEO_FOLDER = "data/raw_videos"
+OUTPUT_FOLDER = "visual/data/features"
 
-def process_video(video_path, output_folder, fps_target=2):
-    """
-    Process one video and save its visual features.
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-    Parameters
-    ----------
-    video_path : str
-    output_folder : str
-    fps_target : int
+# -----------------------------
+# Process One Video
+# -----------------------------
+def process_video(video_path, output_path):
 
-    Returns
-    -------
-    numpy.ndarray
-    """
+    start_time = time.time()
 
-    print(f"\nProcessing {os.path.basename(video_path)}")
+    frames = extract_frames(video_path, fps_target=2)
 
-    frames = extract_frames(video_path, fps_target)
+    total_frames = len(frames)
+    skipped_frames = 0
 
     features = []
 
-    skipped = 0
+    for frame in frames:
 
-    for frame in tqdm(frames, desc="Processing Frames"):
+        face_tensor = get_aligned_face(frame)
 
-        face = get_aligned_face(frame)
-
-        if face is None:
-            skipped += 1
+        if face_tensor is None:
+            skipped_frames += 1
             continue
 
-        feature = get_feature_vector(face)
+        feature_vector = get_feature_vector(face_tensor)
 
-        features.append(feature)
+        features.append(feature_vector)
 
-    features = np.array(features)
+    # ------------------------------------
+    # No faces detected
+    # ------------------------------------
+    if len(features) == 0:
 
-    os.makedirs(output_folder, exist_ok=True)
+        print(f"\n❌ No faces detected in {os.path.basename(video_path)}")
 
-    video_name = os.path.splitext(os.path.basename(video_path))[0]
+        return
 
-    save_path = os.path.join(output_folder, video_name + ".npy")
+    # ------------------------------------
+    # Mean Pooling
+    # ------------------------------------
+    pooled_feature = np.mean(features, axis=0)
 
-    np.save(save_path, features)
+    # shape -> (1280,)
+    np.save(output_path, pooled_feature)
 
-    print("\nProcessing Complete")
-    print("-------------------------")
-    print("Frames Sampled :", len(frames))
-    print("Faces Detected :", len(features))
-    print("Frames Skipped :", skipped)
-    print("Feature Shape  :", features.shape)
-    print("Saved File     :", save_path)
+    end_time = time.time()
 
-    return features
+    processing_time = end_time - start_time
+
+    detected_faces = len(features)
+
+    skip_rate = (skipped_frames / total_frames) * 100 if total_frames > 0 else 0
+
+    print("\n------------------------------------------")
+    print("Video :", os.path.basename(video_path))
+    print("Frames Sampled :", total_frames)
+    print("Faces Detected :", detected_faces)
+    print("Frames Skipped :", skipped_frames)
+    print(f"Skip Rate : {skip_rate:.2f}%")
+    print("Output Shape :", pooled_feature.shape)
+    print(f"Processing Time : {processing_time:.2f} sec")
+    print("Saved :", output_path)
+    print("------------------------------------------")
 
 
+# -----------------------------
+# Main
+# -----------------------------
 if __name__ == "__main__":
 
-    process_video(
-        video_path="data/raw_videos/real_harini_001.mp4",
-        output_folder="visual/data/visual_features",
-        fps_target=2
-    )
+    for filename in tqdm(os.listdir(VIDEO_FOLDER)):
+
+        if filename.lower().endswith((".mp4", ".avi", ".mov")):
+
+            video_path = os.path.join(VIDEO_FOLDER, filename)
+
+            output_file = os.path.splitext(filename)[0] + ".npy"
+
+            output_path = os.path.join(OUTPUT_FOLDER, output_file)
+
+            process_video(video_path, output_path)
