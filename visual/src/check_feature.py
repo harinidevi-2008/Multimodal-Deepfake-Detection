@@ -1,15 +1,25 @@
+import logging
+
 import numpy as np
 
-feature_path = "visual/data/features/real_harini_001.npy"
+try:
+    from .config import OUTPUT_FOLDER, configure_logging
+except ImportError:
+    from config import OUTPUT_FOLDER, configure_logging
 
-feature = np.load(feature_path)
+logger = logging.getLogger(__name__)
 
-print("Shape :", feature.shape)
-print()
 
-print("First 10 values:")
-print(feature[:10])
+def main():
+    configure_logging()
+    feature_path = OUTPUT_FOLDER / "real_harini_001.npy"
+    feature = np.load(feature_path)
 
-print()
+    logger.info("Shape : %s", feature.shape)
+    logger.info("First 10 values:")
+    logger.info("%s", feature[:10])
+    logger.info("Data type: %s", feature.dtype)
 
-print("Data type:", feature.dtype)
+
+if __name__ == "__main__":
+    main()
