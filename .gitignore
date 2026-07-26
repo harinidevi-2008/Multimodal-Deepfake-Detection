@@ -216,3 +216,26 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ==========================
+# Deepfake Detection Project
+# ==========================
+
+# Dataset (large files)
+datasets/
+
+# Generated visual features
+visual/data/features/
+
+# Generated audio features
+audio/data/features/
+
+# Debug outputs
+visual/debug/
+audio/debug/
+
+# Temporary verification files
+missing_videos.txt
+
+# macOS
+.DS_Store

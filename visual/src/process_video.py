@@ -72,11 +72,15 @@ def process_video(video_path, output_path):
 def process_directory(video_folder=VIDEO_FOLDER, output_folder=OUTPUT_FOLDER):
     output_folder.mkdir(parents=True, exist_ok=True)
 
-    for video_path in sorted(video_folder.iterdir()):
-        if video_path.is_file() and video_path.suffix.lower() in {".mp4", ".avi", ".mov"}:
-            output_file = video_path.stem + ".npy"
-            output_path = output_folder / output_file
-            process_video(str(video_path), str(output_path))
+    video_files = sorted(video_folder.rglob("*.mp4"))
+
+    logger.info("Found %d videos", len(video_files))
+
+    for video_path in tqdm(video_files):
+        output_file = video_path.stem + ".npy"
+        output_path = output_folder / output_file
+
+        process_video(str(video_path), str(output_path))
 
     return output_folder
 
