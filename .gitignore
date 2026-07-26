@@ -217,3 +217,17 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .DS_Store
+
+# Dataset
+datasets/
+
+# Generated feature files (optional)
+audio_features/
+visual/data/features/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Datasets
+datasets/
