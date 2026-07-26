@@ -5,6 +5,7 @@ import torch
 
 from moviepy.editor import VideoFileClip
 from transformers import Wav2Vec2Processor, Wav2Vec2Model
+from projection import AudioProjection
 
 # =====================================================
 # CONFIGURATION
@@ -20,7 +21,7 @@ os.makedirs(AUDIO_FOLDER, exist_ok=True)
 os.makedirs(FEATURE_FOLDER, exist_ok=True)
 
 # =====================================================
-# LOAD WAV2VEC2 MODEL (LOAD ONLY ONCE)
+# LOAD WAV2VEC2 PROCESSOR
 # =====================================================
 
 print("\nLoading Wav2Vec2 Processor...")
@@ -30,6 +31,10 @@ processor = Wav2Vec2Processor.from_pretrained(
 )
 
 print("Processor Loaded Successfully")
+
+# =====================================================
+# LOAD WAV2VEC2 MODEL
+# =====================================================
 
 print("\nLoading Wav2Vec2 Model...")
 
@@ -41,6 +46,17 @@ model.eval()
 
 print("Model Loaded Successfully\n")
 
+# =====================================================
+# LOAD AUDIO PROJECTION MODEL
+# =====================================================
+
+print("Loading Projection Model...")
+
+projection_model = AudioProjection()
+
+projection_model.eval()
+
+print("Projection Model Loaded Successfully\n")
 
 # =====================================================
 # PROCESS EACH VIDEO
@@ -150,18 +166,27 @@ for video in video_files:
 
     feature_vector = hidden_states.mean(dim=1)
 
-    print("Final Feature Shape :", feature_vector.shape)
+    print("768-D Feature Shape :", feature_vector.shape)
 
     # =================================================
-    # STEP 7 : Save Feature Vector
+    # STEP 7 : Projection (768 -> 256)
+    # =================================================
+
+    with torch.no_grad():
+        projected_feature = projection_model(feature_vector)
+
+    print("256-D Feature Shape :", projected_feature.shape)
+
+    # =================================================
+    # STEP 8 : Save Projected Feature
     # =================================================
 
     np.save(
         feature_path,
-        feature_vector.squeeze().cpu().numpy()
+        projected_feature.squeeze().cpu().numpy()
     )
 
-    print("Saved Feature :", feature_path)
+    print("Saved Projected Feature :", feature_path)
 
 print("\n=============================================")
 print("All videos processed successfully.")
