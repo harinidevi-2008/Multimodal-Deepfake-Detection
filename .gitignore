@@ -239,3 +239,14 @@ missing_videos.txt
 
 # macOS
 .DS_Store
+# Precomputed feature files
+*.npy
+
+# Aligned visual features
+visual/data/features_aligned/
+
+# Fusion test data
+fusion/test_data/
+
+# Generated semantic features
+semantic/features/
