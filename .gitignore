@@ -230,4 +230,9 @@ __pycache__/
 *.pyc
 
 # Datasets
-datasets/
+datasets/*.npy
+*.npy
+temp_audio/
+FakeAVCeleb_v1.2/
+features.txt
+videos.txt

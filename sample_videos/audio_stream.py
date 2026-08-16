@@ -39,8 +39,12 @@ model = Wav2Vec2Model.from_pretrained(
 
 model.eval()
 
-print("Model Loaded Successfully\n")
+# Freeze Wav2Vec2 parameters
+for param in model.parameters():
+    param.requires_grad = False
 
+print("Wav2Vec2 parameters frozen.")
+print("Model Loaded Successfully\n")
 
 # =====================================================
 # PROCESS EACH VIDEO
