@@ -1,0 +1,30 @@
+# Multimodal Deepfake Detection — unified environment
+# Pinned to the combo verified working end-to-end on the semantic stream
+# (torch 2.2.2 + transformers 5.x are INCOMPATIBLE — do not upgrade transformers
+#  or sentence-transformers without re-testing all three streams).
+
+torch==2.2.2
+torchvision==0.17.2
+torchaudio==2.2.0
+numpy==1.26.4
+
+# Semantic stream
+openai-whisper==20250625
+sentence-transformers==2.7.0
+transformers==4.38.2
+
+# Visual stream
+facenet-pytorch==2.6.0
+opencv-python==4.11.0.86
+pillow==10.2.0
+
+# Audio stream
+librosa==0.11.0
+soundfile==0.14.0
+audioread==3.1.0
+
+# Shared / fusion
+scikit-learn==1.9.0
+scipy==1.17.1
+matplotlib==3.11.0
+tqdm==4.68.4

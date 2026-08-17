@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+venv/
+*.npy
+!fusion/best_fusion_model.pt
+features/
+FakeAVCeleb_v1.2/
+datasets/
+*.wav
+temp_audio/
+.DS_Store
