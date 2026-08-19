@@ -21,12 +21,137 @@ keep it that way; don't pre-project features before saving.
 ## Repo layout
 
 ```
-visual/src/       frame extraction, face alignment, EfficientNet feature extraction
-audio/src/        audio extraction, mel-spectrogram, Wav2Vec2 feature extraction
-semantic/src/     transcription (Whisper) + embedding (Sentence-BERT) + precompute pipeline
-fusion/           FusionModel, FusionDataset, train_fusion.py, best_fusion_model.pt
-requirements.txt  single merged environment for all three streams + fusion
+visual/src/           frame extraction, face alignment, EfficientNet feature extraction
+visual/src/eye_blink/ landmark-based blink detection and irregularity scoring (rule-based)
+visual/src/lipsync/   mouth-motion vs audio-energy consistency scoring (rule-based)
+audio/src/            audio extraction, mel-spectrogram, Wav2Vec2 feature extraction
+semantic/src/         transcription (Whisper) + embedding (Sentence-BERT) + precompute pipeline
+fusion/                FusionModel, FusionDataset, train_fusion.py, best_fusion_model.pt
+requirements.txt       single merged environment for all streams + fusion
 ```
+
+### Eye-blink and lip-sync modules
+
+Both are lightweight, rule-based (no trainable weights) and independent of the
+EfficientNet visual pipeline and the Wav2Vec2 audio pipeline — neither imports
+from nor modifies the existing feature extraction code.
+
+Run them directly:
+
+```bash
+python visual/src/eye_blink/eye_blink_test.py path/to/video.mp4
+python visual/src/lipsync/lipsync_test.py path/to/video.mp4
+```
+
+- **Eye-blink**: face-mesh landmarks (MediaPipe) → Eye Aspect Ratio per frame →
+  blink events → blink count, rate, and an irregularity score (0-1, higher =
+  more abnormal). Samples the video at its own higher frame rate rather than
+  reusing the main pipeline's low `DEFAULT_FPS_TARGET`, since individual
+  blinks (100-400ms) would fall between sparsely-sampled frames.
+- **Lip-sync**: mouth-opening ratio per frame (same landmark model) correlated
+  against the audio's RMS energy envelope, with a small search over time-lag
+  to tolerate minor start-offset misalignment. Outputs a consistency score
+  (0-1, higher = better synced). Pass an already-extracted wav via
+  `--audio path.wav` (e.g. from the audio stream's `temp_audio/` folder), or
+  let it auto-extract one with ffmpeg.
+
+Both currently return a per-video scalar score/status — not yet wired into
+`fusion/fusion_model.py`. See the "further steps" discussion for how to feed
+them in as two extra tokens/features alongside visual, audio, and semantic.
+
+### Individual modality classifiers
+
+`classifiers/` holds a small MLP head trained per-modality on the existing
+frozen features — visual (1280-d), audio (768-d), or semantic (384-d) — so
+each stream can report its own fake-probability independently of the fusion
+model. One generic script handles all three modalities via CLI flags:
+
+```bash
+python classifiers/train_classifier.py --modality visual \
+    --feature-root visual/data/features_aligned --input-dim 1280
+
+python classifiers/evaluate_classifier.py --modality visual \
+    --feature-root visual/data/features_aligned --input-dim 1280 \
+    --weights classifiers/best_visual_classifier.pt --save-probs classifiers/visual_probs.npy
+```
+
+Evaluation reports accuracy, precision, recall, F1, ROC-AUC, and a confusion
+matrix over the full feature set (not a single sample), and `--save-probs`
+writes per-sample fake-probabilities to `.npy` for later use by the evidence
+layer.
+
+**Note:** no trained weights (`best_visual_classifier.pt` etc.) are included
+in this repo — training requires the real precomputed `.npy` features, which
+only exist on the machine that ran the feature-extraction pipelines. Run
+`train_classifier.py` yourself once you have those features in place.
+
+### Blink and lip-sync feature precomputation
+
+Before the enhanced fusion model can use blink/lip-sync evidence, those
+scores need to exist as `.npy` files mirroring the dataset structure, same
+as the other three streams. `visual/src/blink_lipsync_precompute.py` runs
+`analyze_blinks()` and `analyze_lipsync()` across every video in a dataset
+folder and saves two small feature vectors per video:
+
+```bash
+python visual/src/blink_lipsync_precompute.py \
+    --dataset-root FakeAVCeleb_v1.2 \
+    --blink-output visual/data/blink_features \
+    --lipsync-output visual/data/lipsync_features
+```
+
+Blink vector (4-d): `[blink_count, blink_rate_per_min, average_blink_duration_sec, blink_irregularity_score]`
+Lip-sync vector (2-d): `[sync_score, mismatch_score]`
+
+Safe to re-run after an interruption — already-processed videos are skipped.
+
+### Enhanced fusion model (visual + audio + semantic + blink + lip-sync)
+
+`fusion/enhanced_fusion_model.py` and `fusion/enhanced_fusion_dataset.py` are
+new, separate files — the original `FusionModel`/`FusionDataset` are
+untouched and still usable on their own. The enhanced model projects blink
+and lip-sync vectors into the same shared 256-d space as the other three
+modalities and treats them as two additional tokens in the cross-attention
+block (5 tokens total instead of 3), rather than only combining them at the
+final decision layer.
+
+```bash
+python fusion/train_enhanced_fusion.py \
+    --visual-root visual/data/features_aligned --audio-root audio/data/features \
+    --semantic-root semantic/data/features --blink-root visual/data/blink_features \
+    --lipsync-root visual/data/lipsync_features
+```
+
+### Evidence / explanation layer
+
+`evidence/evidence_builder.py` composes the classifier probabilities, the
+blink/lip-sync results, and the fusion model's final probability into one
+structured report with plain-language reasons — e.g. "Abnormal blinking
+pattern", "Audio-visual synchronization inconsistency". It's a pure function,
+not a pipeline — it doesn't run any model itself, just assembles scores you
+already computed. See `evidence/evidence_test.py` for example usage and
+output shape.
+
+### Full evaluation
+
+`eval/run_full_evaluation.py` runs every evaluation script in sequence
+(visual/audio/semantic classifiers, original fusion, enhanced fusion, and
+the rule-based blink/lip-sync scores) and prints one consolidated report.
+Gracefully skips any section whose weights or feature roots don't exist yet.
+
+Blink and lip-sync are evaluated separately from the trained classifiers
+(`fusion/evaluate_blink_lipsync.py`) using ROC-AUC and their own analyzers'
+fixed thresholds — deliberately not framed as "trained classifier accuracy",
+since they're rule-based (EAR thresholds, correlation) with no learned
+decision boundary or train/val split of their own.
+
+### What's still open
+
+- **External dataset evaluation (DFDC, FaceForensics++)** — deliberately not
+  started. These are a separate generalization-testing stage once the full
+  backend above is validated on FakeAVCeleb; the training/evaluation
+  protocol (what gets trained on what, what's held out for generalization
+  testing) needs to be decided before mixing datasets in.
 
 ## Setup
 

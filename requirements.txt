@@ -18,6 +18,11 @@ facenet-pytorch==2.6.0
 opencv-python==4.11.0.86
 pillow==10.2.0
 
+# Visual stream - eye-blink and lip-sync modules
+# mediapipe 0.10.15+ dropped the legacy `solutions` API these modules use
+# (mp.solutions.face_mesh) in favor of the newer Tasks API. Stay on 0.10.14.
+mediapipe==0.10.14
+
 # Audio stream
 librosa==0.11.0
 soundfile==0.14.0
