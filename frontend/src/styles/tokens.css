@@ -1,0 +1,71 @@
+:root {
+  /* ---- surface & background ---- */
+  --bg: #f6f7fb;
+  --bg-subtle: #eef1f7;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --border: #e2e6ee;
+  --border-strong: #cbd2e0;
+
+  /* ---- text ---- */
+  --text-primary: #1a2130;
+  --text-secondary: #5b6472;
+  --text-muted: #8a93a3;
+  --text-inverse: #ffffff;
+
+  /* ---- brand / accent ---- */
+  --accent: #3457d5;
+  --accent-strong: #2743b0;
+  --accent-soft: #eaefff;
+  --accent-soft-border: #d3ddfb;
+
+  /* ---- semantic status ---- */
+  --danger: #d1403f;
+  --danger-strong: #b32e2e;
+  --danger-soft: #fdecec;
+  --danger-soft-border: #f8caca;
+
+  --success: #1f9d55;
+  --success-strong: #17803f;
+  --success-soft: #e8f7ee;
+  --success-soft-border: #c8ecd7;
+
+  --warning: #b5790a;
+  --warning-strong: #8f5f06;
+  --warning-soft: #fdf3e0;
+  --warning-soft-border: #f5ddab;
+
+  /* ---- modality accent hues (used consistently across cards/charts) ---- */
+  --hue-visual: #3457d5;
+  --hue-audio: #0f9b8e;
+  --hue-semantic: #8a4fd1;
+  --hue-blink: #c17817;
+  --hue-lipsync: #d1407e;
+
+  /* ---- elevation ---- */
+  --shadow-sm: 0 1px 2px rgba(23, 32, 55, 0.06);
+  --shadow-md: 0 4px 14px rgba(23, 32, 55, 0.07);
+  --shadow-lg: 0 12px 32px rgba(23, 32, 55, 0.10);
+
+  /* ---- radius ---- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+
+  /* ---- spacing ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* ---- type ---- */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --container-width: 1180px;
+}

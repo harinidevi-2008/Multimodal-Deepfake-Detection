@@ -1,0 +1,1217 @@
+{
+  "video_filename": "clip_0203_statement.mp4",
+  "video_duration_seconds": 14.8,
+  "analyzed_at": "2026-08-27T10:42:00+05:30",
+  "processing_time_seconds": 7.1,
+  "final_verdict": "LIKELY_REAL",
+  "final_fake_probability": 0.153,
+  "final_real_probability": 0.847,
+  "low_confidence": false,
+  "model_confidence_note": "Model confidence reflects distance from the 0.5 decision boundary on the calibrated fusion output, not a calibrated probability of ground truth.",
+  "modalities": {
+    "visual": {
+      "label": "Visual",
+      "kind": "learned_probability",
+      "fake_probability": 0.091
+    },
+    "audio": {
+      "label": "Audio",
+      "kind": "learned_probability",
+      "fake_probability": 0.164
+    },
+    "semantic": {
+      "label": "Semantic",
+      "kind": "learned_probability",
+      "fake_probability": 0.269
+    },
+    "eye_blink": {
+      "label": "Eye Blink",
+      "kind": "rule_based_score",
+      "anomaly_score": 0.192,
+      "status": "Normal"
+    },
+    "lip_sync": {
+      "label": "Lip Sync",
+      "kind": "rule_based_score",
+      "mismatch_score": 0.151,
+      "status": "Consistent"
+    }
+  },
+  "attention_summary": {
+    "weights": {
+      "visual": 0.32,
+      "audio": 0.209,
+      "semantic": 0.128,
+      "eye_blink": 0.155,
+      "lip_sync": 0.189
+    },
+    "note": "Descriptive cross-attention weights from the fusion model's attention layer. These describe where the model attended, not a causal or verified measure of importance — see modality_contributions for the ablation-based estimate."
+  },
+  "modality_contributions": {
+    "deltas": {
+      "visual": 0.058,
+      "audio": 0.045,
+      "semantic": 0.045,
+      "eye_blink": 0.03,
+      "lip_sync": 0.024
+    },
+    "note": "Ablation-based: each value is the drop in the final fake probability when that modality's input is zeroed out. Zeroing a stream is not the same as the model having 'never observed' it — treat as a heuristic, not ground truth attribution."
+  },
+  "evidence": {
+    "frames": [
+      {
+        "frame_index": 53,
+        "timestamp_seconds": 1.77,
+        "image_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMjAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMzIwIDI0MCI+CiAgICA8ZGVmcz4KICAgICAgPGxpbmVhckdyYWRpZW50IGlkPSJnMCIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2VlZjJmNyIvPgogICAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2RiZTNlZSIvPgogICAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPC9kZWZzPgogICAgPHJlY3Qgd2lkdGg9IjMyMCIgaGVpZ2h0PSIyNDAiIHJ4PSIxNCIgZmlsbD0idXJsKCNnMCkiLz4KICAgIDxlbGxpcHNlIGN4PSIxNjAiIGN5PSIxMTIiIHJ4PSI1NCIgcnk9IjY2IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjU1Ii8+CiAgICA8Y2lyY2xlIGN4PSIxMzYiIGN5PSIxMDAiIHI9IjYiIGZpbGw9IiM4ODk0YTgiLz4KICAgIDxjaXJjbGUgY3g9IjE4NCIgY3k9IjEwMCIgcj0iNiIgZmlsbD0iIzg4OTRhOCIvPgogICAgPHBhdGggZD0iTTEzNiAxMzIgUTE2MCAxNDggMTg0IDEzMiIgc3Ryb2tlPSIjODg5NGE4IiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPHRleHQgeD0iMTYwIiB5PSIyMjAiIGZvbnQtZmFtaWx5PSJJbnRlciwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzViNjQ3MiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+dD0xLjc3czwvdGV4dD4KICA8L3N2Zz4=",
+        "frame_selection_reason": "uniform_sample",
+        "detected_artifact": null
+      },
+      {
+        "frame_index": 55,
+        "timestamp_seconds": 1.83,
+        "image_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMjAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMzIwIDI0MCI+CiAgICA8ZGVmcz4KICAgICAgPGxpbmVhckdyYWRpZW50IGlkPSJnMSIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2U3ZjZlZSIvPgogICAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2M5ZWNkOSIvPgogICAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPC9kZWZzPgogICAgPHJlY3Qgd2lkdGg9IjMyMCIgaGVpZ2h0PSIyNDAiIHJ4PSIxNCIgZmlsbD0idXJsKCNnMSkiLz4KICAgIDxlbGxpcHNlIGN4PSIxNjAiIGN5PSIxMTIiIHJ4PSI1NCIgcnk9IjY2IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjU1Ii8+CiAgICA8Y2lyY2xlIGN4PSIxMzYiIGN5PSIxMDAiIHI9IjYiIGZpbGw9IiM4ODk0YTgiLz4KICAgIDxjaXJjbGUgY3g9IjE4NCIgY3k9IjEwMCIgcj0iNiIgZmlsbD0iIzg4OTRhOCIvPgogICAgPHBhdGggZD0iTTEzNiAxMzIgUTE2MCAxNDggMTg0IDEzMiIgc3Ryb2tlPSIjODg5NGE4IiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPHRleHQgeD0iMTYwIiB5PSIyMjAiIGZvbnQtZmFtaWx5PSJJbnRlciwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzViNjQ3MiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+dD0xLjgzczwvdGV4dD4KICA8L3N2Zz4=",
+        "frame_selection_reason": "eye_blink_event",
+        "detected_artifact": null
+      },
+      {
+        "frame_index": 151,
+        "timestamp_seconds": 5.03,
+        "image_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMjAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMzIwIDI0MCI+CiAgICA8ZGVmcz4KICAgICAgPGxpbmVhckdyYWRpZW50IGlkPSJnMiIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2VlZjJmNyIvPgogICAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2RiZTNlZSIvPgogICAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPC9kZWZzPgogICAgPHJlY3Qgd2lkdGg9IjMyMCIgaGVpZ2h0PSIyNDAiIHJ4PSIxNCIgZmlsbD0idXJsKCNnMikiLz4KICAgIDxlbGxpcHNlIGN4PSIxNjAiIGN5PSIxMTIiIHJ4PSI1NCIgcnk9IjY2IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjU1Ii8+CiAgICA8Y2lyY2xlIGN4PSIxMzYiIGN5PSIxMDAiIHI9IjYiIGZpbGw9IiM4ODk0YTgiLz4KICAgIDxjaXJjbGUgY3g9IjE4NCIgY3k9IjEwMCIgcj0iNiIgZmlsbD0iIzg4OTRhOCIvPgogICAgPHBhdGggZD0iTTEzNiAxMzIgUTE2MCAxNDggMTg0IDEzMiIgc3Ryb2tlPSIjODg5NGE4IiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPHRleHQgeD0iMTYwIiB5PSIyMjAiIGZvbnQtZmFtaWx5PSJJbnRlciwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzViNjQ3MiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+dD01LjAzczwvdGV4dD4KICA8L3N2Zz4=",
+        "frame_selection_reason": "uniform_sample",
+        "detected_artifact": null
+      },
+      {
+        "frame_index": 201,
+        "timestamp_seconds": 6.7,
+        "image_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMjAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMzIwIDI0MCI+CiAgICA8ZGVmcz4KICAgICAgPGxpbmVhckdyYWRpZW50IGlkPSJnMyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2U3ZjZlZSIvPgogICAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2M5ZWNkOSIvPgogICAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPC9kZWZzPgogICAgPHJlY3Qgd2lkdGg9IjMyMCIgaGVpZ2h0PSIyNDAiIHJ4PSIxNCIgZmlsbD0idXJsKCNnMykiLz4KICAgIDxlbGxpcHNlIGN4PSIxNjAiIGN5PSIxMTIiIHJ4PSI1NCIgcnk9IjY2IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjU1Ii8+CiAgICA8Y2lyY2xlIGN4PSIxMzYiIGN5PSIxMDAiIHI9IjYiIGZpbGw9IiM4ODk0YTgiLz4KICAgIDxjaXJjbGUgY3g9IjE4NCIgY3k9IjEwMCIgcj0iNiIgZmlsbD0iIzg4OTRhOCIvPgogICAgPHBhdGggZD0iTTEzNiAxMzIgUTE2MCAxNDggMTg0IDEzMiIgc3Ryb2tlPSIjODg5NGE4IiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPHRleHQgeD0iMTYwIiB5PSIyMjAiIGZvbnQtZmFtaWx5PSJJbnRlciwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzViNjQ3MiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+dD02LjdzPC90ZXh0PgogIDwvc3ZnPg==",
+        "frame_selection_reason": "eye_blink_event",
+        "detected_artifact": null
+      },
+      {
+        "frame_index": 258,
+        "timestamp_seconds": 8.6,
+        "image_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMjAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMzIwIDI0MCI+CiAgICA8ZGVmcz4KICAgICAgPGxpbmVhckdyYWRpZW50IGlkPSJnNCIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2VlZjJmNyIvPgogICAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2RiZTNlZSIvPgogICAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPC9kZWZzPgogICAgPHJlY3Qgd2lkdGg9IjMyMCIgaGVpZ2h0PSIyNDAiIHJ4PSIxNCIgZmlsbD0idXJsKCNnNCkiLz4KICAgIDxlbGxpcHNlIGN4PSIxNjAiIGN5PSIxMTIiIHJ4PSI1NCIgcnk9IjY2IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjU1Ii8+CiAgICA8Y2lyY2xlIGN4PSIxMzYiIGN5PSIxMDAiIHI9IjYiIGZpbGw9IiM4ODk0YTgiLz4KICAgIDxjaXJjbGUgY3g9IjE4NCIgY3k9IjEwMCIgcj0iNiIgZmlsbD0iIzg4OTRhOCIvPgogICAgPHBhdGggZD0iTTEzNiAxMzIgUTE2MCAxNDggMTg0IDEzMiIgc3Ryb2tlPSIjODg5NGE4IiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPHRleHQgeD0iMTYwIiB5PSIyMjAiIGZvbnQtZmFtaWx5PSJJbnRlciwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzViNjQ3MiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+dD04LjZzPC90ZXh0PgogIDwvc3ZnPg==",
+        "frame_selection_reason": "uniform_sample",
+        "detected_artifact": null
+      },
+      {
+        "frame_index": 364,
+        "timestamp_seconds": 12.13,
+        "image_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMjAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMzIwIDI0MCI+CiAgICA8ZGVmcz4KICAgICAgPGxpbmVhckdyYWRpZW50IGlkPSJnNSIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2VlZjJmNyIvPgogICAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2RiZTNlZSIvPgogICAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPC9kZWZzPgogICAgPHJlY3Qgd2lkdGg9IjMyMCIgaGVpZ2h0PSIyNDAiIHJ4PSIxNCIgZmlsbD0idXJsKCNnNSkiLz4KICAgIDxlbGxpcHNlIGN4PSIxNjAiIGN5PSIxMTIiIHJ4PSI1NCIgcnk9IjY2IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjU1Ii8+CiAgICA8Y2lyY2xlIGN4PSIxMzYiIGN5PSIxMDAiIHI9IjYiIGZpbGw9IiM4ODk0YTgiLz4KICAgIDxjaXJjbGUgY3g9IjE4NCIgY3k9IjEwMCIgcj0iNiIgZmlsbD0iIzg4OTRhOCIvPgogICAgPHBhdGggZD0iTTEzNiAxMzIgUTE2MCAxNDggMTg0IDEzMiIgc3Ryb2tlPSIjODg5NGE4IiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPHRleHQgeD0iMTYwIiB5PSIyMjAiIGZvbnQtZmFtaWx5PSJJbnRlciwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzViNjQ3MiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+dD0xMi4xM3M8L3RleHQ+CiAgPC9zdmc+",
+        "frame_selection_reason": "uniform_sample",
+        "detected_artifact": null
+      },
+      {
+        "frame_index": 422,
+        "timestamp_seconds": 14.07,
+        "image_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMjAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMzIwIDI0MCI+CiAgICA8ZGVmcz4KICAgICAgPGxpbmVhckdyYWRpZW50IGlkPSJnNiIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2VlZjJmNyIvPgogICAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2RiZTNlZSIvPgogICAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPC9kZWZzPgogICAgPHJlY3Qgd2lkdGg9IjMyMCIgaGVpZ2h0PSIyNDAiIHJ4PSIxNCIgZmlsbD0idXJsKCNnNikiLz4KICAgIDxlbGxpcHNlIGN4PSIxNjAiIGN5PSIxMTIiIHJ4PSI1NCIgcnk9IjY2IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjU1Ii8+CiAgICA8Y2lyY2xlIGN4PSIxMzYiIGN5PSIxMDAiIHI9IjYiIGZpbGw9IiM4ODk0YTgiLz4KICAgIDxjaXJjbGUgY3g9IjE4NCIgY3k9IjEwMCIgcj0iNiIgZmlsbD0iIzg4OTRhOCIvPgogICAgPHBhdGggZD0iTTEzNiAxMzIgUTE2MCAxNDggMTg0IDEzMiIgc3Ryb2tlPSIjODg5NGE4IiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPHRleHQgeD0iMTYwIiB5PSIyMjAiIGZvbnQtZmFtaWx5PSJJbnRlciwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzViNjQ3MiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+dD0xNC4wN3M8L3RleHQ+CiAgPC9zdmc+",
+        "frame_selection_reason": "uniform_sample",
+        "detected_artifact": null
+      }
+    ],
+    "audio_waveform": {
+      "sample_rate_hz": 16000,
+      "duration_seconds": 14.8,
+      "envelope": [
+        0.37,
+        0.414,
+        0.476,
+        0.48,
+        0.428,
+        0.526,
+        0.51,
+        0.625,
+        0.646,
+        0.674,
+        0.725,
+        0.564,
+        0.644,
+        0.575,
+        0.662,
+        0.684,
+        0.734,
+        0.66,
+        0.624,
+        0.789,
+        0.632,
+        0.645,
+        0.736,
+        0.644,
+        0.657,
+        0.534,
+        0.65,
+        0.647,
+        0.57,
+        0.591,
+        0.596,
+        0.585,
+        0.561,
+        0.514,
+        0.487,
+        0.478,
+        0.529,
+        0.482,
+        0.427,
+        0.569,
+        0.642,
+        0.574,
+        0.682,
+        0.648,
+        0.743,
+        0.741,
+        0.652,
+        0.752,
+        0.667,
+        0.682,
+        0.853,
+        0.81,
+        0.801,
+        0.883,
+        0.716,
+        0.845,
+        0.691,
+        0.762,
+        0.687,
+        0.751,
+        0.669,
+        0.684,
+        0.658,
+        0.756,
+        0.646,
+        0.667,
+        0.587,
+        0.685,
+        0.619,
+        0.615,
+        0.565,
+        0.549,
+        0.466,
+        0.549,
+        0.638,
+        0.544,
+        0.599,
+        0.606,
+        0.661,
+        0.724,
+        0.651,
+        0.668,
+        0.77,
+        0.851,
+        0.742,
+        0.879,
+        0.817,
+        0.817,
+        0.815,
+        0.771,
+        0.698,
+        0.851,
+        0.739,
+        0.691,
+        0.872,
+        0.833,
+        0.672,
+        0.667,
+        0.707,
+        0.754,
+        0.734,
+        0.685,
+        0.746,
+        0.567,
+        0.579,
+        0.587,
+        0.584,
+        0.505,
+        0.536,
+        0.554,
+        0.55,
+        0.536,
+        0.619,
+        0.645,
+        0.647,
+        0.73,
+        0.525,
+        0.597,
+        0.711,
+        0.686,
+        0.744,
+        0.63,
+        0.825,
+        0.622,
+        0.798,
+        0.697,
+        0.658,
+        0.732,
+        0.67,
+        0.691,
+        0.801,
+        0.666,
+        0.787,
+        0.785,
+        0.642,
+        0.614,
+        0.645,
+        0.656,
+        0.651,
+        0.645,
+        0.641,
+        0.529,
+        0.608,
+        0.463,
+        0.458,
+        0.443,
+        0.379,
+        0.367,
+        0.482,
+        0.437,
+        0.473,
+        0.512,
+        0.449,
+        0.498,
+        0.645,
+        0.658,
+        0.676,
+        0.654,
+        0.594,
+        0.652,
+        0.579,
+        0.661,
+        0.636,
+        0.6,
+        0.655,
+        0.633,
+        0.576,
+        0.661,
+        0.671,
+        0.645,
+        0.651,
+        0.667,
+        0.722,
+        0.687,
+        0.548,
+        0.53,
+        0.601,
+        0.609,
+        0.553,
+        0.463,
+        0.492,
+        0.418,
+        0.459,
+        0.44,
+        0.449,
+        0.487,
+        0.404,
+        0.464,
+        0.533,
+        0.634,
+        0.622,
+        0.639,
+        0.674,
+        0.68,
+        0.736,
+        0.78,
+        0.758,
+        0.646,
+        0.822,
+        0.814,
+        0.784,
+        0.822,
+        0.679,
+        0.799,
+        0.708,
+        0.713,
+        0.631,
+        0.693,
+        0.602,
+        0.593,
+        0.66,
+        0.661,
+        0.732,
+        0.643,
+        0.66,
+        0.647,
+        0.62,
+        0.515,
+        0.507,
+        0.437,
+        0.452,
+        0.553,
+        0.586,
+        0.642,
+        0.474,
+        0.555,
+        0.558,
+        0.62,
+        0.529,
+        0.688,
+        0.599,
+        0.783,
+        0.776,
+        0.882,
+        0.749,
+        0.867,
+        0.899,
+        0.846,
+        0.748,
+        0.759,
+        0.689,
+        0.812,
+        0.786,
+        0.87,
+        0.668,
+        0.753,
+        0.67,
+        0.67,
+        0.75,
+        0.724,
+        0.65,
+        0.686,
+        0.715,
+        0.535,
+        0.586,
+        0.545,
+        0.561,
+        0.575,
+        0.541,
+        0.584
+      ]
+    },
+    "lip_sync_window_evidence": [
+      {
+        "window_start_seconds": 0,
+        "window_end_seconds": 0.8,
+        "mismatch_score": 0.16655252914875746
+      },
+      {
+        "window_start_seconds": 0.8,
+        "window_end_seconds": 1.6,
+        "mismatch_score": 0.15444657640531662
+      },
+      {
+        "window_start_seconds": 1.6,
+        "window_end_seconds": 2.4,
+        "mismatch_score": 0.17851145668886603
+      },
+      {
+        "window_start_seconds": 2.4,
+        "window_end_seconds": 3.2,
+        "mismatch_score": 0.09009066885337236
+      },
+      {
+        "window_start_seconds": 3.2,
+        "window_end_seconds": 4,
+        "mismatch_score": 0.17486968681216242
+      },
+      {
+        "window_start_seconds": 4,
+        "window_end_seconds": 4.8,
+        "mismatch_score": 0.19015319541096687
+      },
+      {
+        "window_start_seconds": 4.8,
+        "window_end_seconds": 5.6,
+        "mismatch_score": 0.10145405971445146
+      },
+      {
+        "window_start_seconds": 5.6,
+        "window_end_seconds": 6.4,
+        "mismatch_score": 0.12866148347035053
+      },
+      {
+        "window_start_seconds": 6.4,
+        "window_end_seconds": 7.2,
+        "mismatch_score": 0.16868862769566478
+      },
+      {
+        "window_start_seconds": 7.2,
+        "window_end_seconds": 8,
+        "mismatch_score": 0.17328884051181376
+      },
+      {
+        "window_start_seconds": 8,
+        "window_end_seconds": 8.8,
+        "mismatch_score": 0.14130204159766438
+      },
+      {
+        "window_start_seconds": 8.8,
+        "window_end_seconds": 9.6,
+        "mismatch_score": 0.1310185157414526
+      },
+      {
+        "window_start_seconds": 9.6,
+        "window_end_seconds": 10.4,
+        "mismatch_score": 0.19325726793147624
+      },
+      {
+        "window_start_seconds": 10.4,
+        "window_end_seconds": 11.2,
+        "mismatch_score": 0.1988411924149841
+      },
+      {
+        "window_start_seconds": 11.2,
+        "window_end_seconds": 12,
+        "mismatch_score": 0.09807534008286894
+      },
+      {
+        "window_start_seconds": 12,
+        "window_end_seconds": 12.8,
+        "mismatch_score": 0.15894527347758414
+      },
+      {
+        "window_start_seconds": 12.8,
+        "window_end_seconds": 13.6,
+        "mismatch_score": 0.10819586527533831
+      },
+      {
+        "window_start_seconds": 13.6,
+        "window_end_seconds": 14.4,
+        "mismatch_score": 0.14841471865773204
+      }
+    ],
+    "blink_timeline": [
+      {
+        "timestamp_seconds": 0,
+        "ear_value": 0.299,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 0.1,
+        "ear_value": 0.302,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 0.2,
+        "ear_value": 0.295,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 0.3,
+        "ear_value": 0.309,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 0.4,
+        "ear_value": 0.305,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 0.5,
+        "ear_value": 0.317,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 0.6,
+        "ear_value": 0.28,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 0.7,
+        "ear_value": 0.285,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 0.8,
+        "ear_value": 0.318,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 0.9,
+        "ear_value": 0.279,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 1,
+        "ear_value": 0.316,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 1.1,
+        "ear_value": 0.291,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 1.2,
+        "ear_value": 0.307,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 1.3,
+        "ear_value": 0.292,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 1.4,
+        "ear_value": 0.315,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 1.5,
+        "ear_value": 0.286,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 1.6,
+        "ear_value": 0.282,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 1.7,
+        "ear_value": 0.104,
+        "is_blink": true
+      },
+      {
+        "timestamp_seconds": 1.8,
+        "ear_value": 0.108,
+        "is_blink": true
+      },
+      {
+        "timestamp_seconds": 1.9,
+        "ear_value": 0.093,
+        "is_blink": true
+      },
+      {
+        "timestamp_seconds": 2,
+        "ear_value": 0.324,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 2.1,
+        "ear_value": 0.278,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 2.2,
+        "ear_value": 0.306,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 2.3,
+        "ear_value": 0.301,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 2.4,
+        "ear_value": 0.284,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 2.5,
+        "ear_value": 0.315,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 2.6,
+        "ear_value": 0.321,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 2.7,
+        "ear_value": 0.309,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 2.8,
+        "ear_value": 0.277,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 2.9,
+        "ear_value": 0.284,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 3,
+        "ear_value": 0.304,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 3.1,
+        "ear_value": 0.286,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 3.2,
+        "ear_value": 0.29,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 3.3,
+        "ear_value": 0.297,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 3.4,
+        "ear_value": 0.283,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 3.5,
+        "ear_value": 0.28,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 3.6,
+        "ear_value": 0.299,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 3.7,
+        "ear_value": 0.309,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 3.8,
+        "ear_value": 0.322,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 3.9,
+        "ear_value": 0.308,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 4,
+        "ear_value": 0.308,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 4.1,
+        "ear_value": 0.298,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 4.2,
+        "ear_value": 0.293,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 4.3,
+        "ear_value": 0.279,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 4.4,
+        "ear_value": 0.291,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 4.5,
+        "ear_value": 0.304,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 4.6,
+        "ear_value": 0.306,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 4.7,
+        "ear_value": 0.32,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 4.8,
+        "ear_value": 0.279,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 4.9,
+        "ear_value": 0.288,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 5,
+        "ear_value": 0.279,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 5.1,
+        "ear_value": 0.299,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 5.2,
+        "ear_value": 0.311,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 5.3,
+        "ear_value": 0.322,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 5.4,
+        "ear_value": 0.279,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 5.5,
+        "ear_value": 0.313,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 5.6,
+        "ear_value": 0.323,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 5.7,
+        "ear_value": 0.297,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 5.8,
+        "ear_value": 0.319,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 5.9,
+        "ear_value": 0.317,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 6,
+        "ear_value": 0.298,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 6.1,
+        "ear_value": 0.278,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 6.2,
+        "ear_value": 0.287,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 6.3,
+        "ear_value": 0.315,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 6.4,
+        "ear_value": 0.282,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 6.5,
+        "ear_value": 0.293,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 6.6,
+        "ear_value": 0.114,
+        "is_blink": true
+      },
+      {
+        "timestamp_seconds": 6.7,
+        "ear_value": 0.11,
+        "is_blink": true
+      },
+      {
+        "timestamp_seconds": 6.8,
+        "ear_value": 0.102,
+        "is_blink": true
+      },
+      {
+        "timestamp_seconds": 6.9,
+        "ear_value": 0.3,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 7,
+        "ear_value": 0.314,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 7.1,
+        "ear_value": 0.31,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 7.2,
+        "ear_value": 0.308,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 7.3,
+        "ear_value": 0.289,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 7.4,
+        "ear_value": 0.284,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 7.5,
+        "ear_value": 0.322,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 7.6,
+        "ear_value": 0.316,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 7.7,
+        "ear_value": 0.293,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 7.8,
+        "ear_value": 0.3,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 7.9,
+        "ear_value": 0.306,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 8,
+        "ear_value": 0.317,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 8.1,
+        "ear_value": 0.28,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 8.2,
+        "ear_value": 0.278,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 8.3,
+        "ear_value": 0.288,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 8.4,
+        "ear_value": 0.319,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 8.5,
+        "ear_value": 0.316,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 8.6,
+        "ear_value": 0.323,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 8.7,
+        "ear_value": 0.314,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 8.8,
+        "ear_value": 0.298,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 8.9,
+        "ear_value": 0.291,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 9,
+        "ear_value": 0.294,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 9.1,
+        "ear_value": 0.28,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 9.2,
+        "ear_value": 0.299,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 9.3,
+        "ear_value": 0.285,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 9.4,
+        "ear_value": 0.281,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 9.5,
+        "ear_value": 0.292,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 9.6,
+        "ear_value": 0.302,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 9.7,
+        "ear_value": 0.288,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 9.8,
+        "ear_value": 0.307,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 9.9,
+        "ear_value": 0.322,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 10,
+        "ear_value": 0.325,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 10.1,
+        "ear_value": 0.279,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 10.2,
+        "ear_value": 0.321,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 10.3,
+        "ear_value": 0.317,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 10.4,
+        "ear_value": 0.31,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 10.5,
+        "ear_value": 0.319,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 10.6,
+        "ear_value": 0.297,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 10.7,
+        "ear_value": 0.314,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 10.8,
+        "ear_value": 0.321,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 10.9,
+        "ear_value": 0.316,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 11,
+        "ear_value": 0.292,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 11.1,
+        "ear_value": 0.282,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 11.2,
+        "ear_value": 0.295,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 11.3,
+        "ear_value": 0.278,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 11.4,
+        "ear_value": 0.276,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 11.5,
+        "ear_value": 0.314,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 11.6,
+        "ear_value": 0.279,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 11.7,
+        "ear_value": 0.286,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 11.8,
+        "ear_value": 0.297,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 11.9,
+        "ear_value": 0.287,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 12,
+        "ear_value": 0.322,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 12.1,
+        "ear_value": 0.31,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 12.2,
+        "ear_value": 0.293,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 12.3,
+        "ear_value": 0.324,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 12.4,
+        "ear_value": 0.291,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 12.5,
+        "ear_value": 0.288,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 12.6,
+        "ear_value": 0.305,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 12.7,
+        "ear_value": 0.3,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 12.8,
+        "ear_value": 0.323,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 12.9,
+        "ear_value": 0.316,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 13,
+        "ear_value": 0.277,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 13.1,
+        "ear_value": 0.318,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 13.2,
+        "ear_value": 0.323,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 13.3,
+        "ear_value": 0.315,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 13.4,
+        "ear_value": 0.276,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 13.5,
+        "ear_value": 0.298,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 13.6,
+        "ear_value": 0.286,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 13.7,
+        "ear_value": 0.301,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 13.8,
+        "ear_value": 0.278,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 13.9,
+        "ear_value": 0.283,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 14,
+        "ear_value": 0.317,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 14.1,
+        "ear_value": 0.282,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 14.2,
+        "ear_value": 0.282,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 14.3,
+        "ear_value": 0.303,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 14.4,
+        "ear_value": 0.319,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 14.5,
+        "ear_value": 0.297,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 14.6,
+        "ear_value": 0.319,
+        "is_blink": false
+      },
+      {
+        "timestamp_seconds": 14.7,
+        "ear_value": 0.321,
+        "is_blink": false
+      }
+    ]
+  },
+  "contextual_analysis": {
+    "detected_mismatch": "No sustained lip-sync or blink-pattern anomalies were detected.",
+    "explanation": "Lip movement stayed correlated with the audio track throughout, and blink timing and duration fell within the expected range. Visual, audio, and semantic streams were all classified with low fake probability."
+  }
+}

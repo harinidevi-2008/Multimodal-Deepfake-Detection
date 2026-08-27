@@ -12,3 +12,7 @@ temp_audio/
 .DS_Store
 missing_videos.txt
 **/evidence_frames/
+
+# API layer job-scoped temp files (uploads, per-request extracted
+# features, served evidence frames) - never real dataset/training data.
+runtime/

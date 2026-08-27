@@ -1,0 +1,8 @@
+# Additive to requirements.txt - only what the API adapter layer
+# (api/server.py, api/pipeline_adapter.py) needs on top of the
+# existing pipeline's dependencies. Versions pinned to what was
+# verified working together in this environment.
+
+fastapi==0.141.1
+uvicorn==0.52.4
+python-multipart==0.0.32
