@@ -129,6 +129,34 @@ def check_api_returns_structured_missing_checkpoint_error():
     return True
 
 
+def check_adapter_preflights_checkpoints():
+    from api import pipeline_adapter
+    from api.errors import MissingCheckpointAPIError
+    from api.jobs import Job
+
+    job = Job("preflight-test")
+    with patch.object(
+        pipeline_adapter,
+        "_missing_checkpoint_paths",
+        return_value=["classifiers/best_visual_classifier.pt"],
+    ), patch.object(pipeline_adapter, "_extract_visual") as extract_visual:
+        try:
+            pipeline_adapter.run_raw_video_analysis(Path("does-not-exist.mp4"), job)
+        except MissingCheckpointAPIError as exc:
+            if exc.details != ["classifiers/best_visual_classifier.pt"]:
+                print(f"[FAIL] preflight details were not preserved: {exc.details!r}")
+                return False
+        else:
+            print("[FAIL] adapter did not reject missing checkpoints before extraction")
+            return False
+
+    if extract_visual.called:
+        print("[FAIL] visual extraction ran before checkpoint preflight")
+        return False
+    print("[PASS] adapter rejects missing checkpoints before feature extraction")
+    return True
+
+
 def main():
     results = []
 
@@ -138,6 +166,7 @@ def main():
 
     r2 = check_api_returns_structured_missing_checkpoint_error()
     results.append(r2)
+    results.append(check_adapter_preflights_checkpoints())
 
     if all(results):
         print("\nAll missing-checkpoint error-path checks passed.")

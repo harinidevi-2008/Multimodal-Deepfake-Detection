@@ -212,7 +212,7 @@ def load_single_stream_probability(feature, weights_path, input_dim):
     model.load_state_dict(torch.load(weights_path, map_location="cpu"))
     model.eval()
 
-    with torch.no_grad():
+    with torch.inference_mode():
         logits = model(torch.from_numpy(feature).unsqueeze(0))
         prob = torch.softmax(logits, dim=1)[0, 1].item()
     return prob
@@ -356,7 +356,7 @@ def run_full_inference(
     fusion_model.load_state_dict(torch.load(enhanced_fusion_weights, map_location="cpu"))
     fusion_model.eval()
 
-    with torch.no_grad():
+    with torch.inference_mode():
         logits, attention = fusion_model(*tensors)
         probs = torch.softmax(logits, dim=1)
         final_fake_probability = probs[0, 1].item()

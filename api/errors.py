@@ -79,6 +79,11 @@ class InferenceFailedError(AnalysisAPIError):
     error_code = "inference_failed"
 
 
+class AnalysisTimeoutError(AnalysisAPIError):
+    status_code = 500
+    error_code = "inference_timeout"
+
+
 class MissingCheckpointAPIError(AnalysisAPIError):
     """Maps inference/full_pipeline.py's MissingCheckpointError to a 503:
     this is not a bug and not the client's fault - a required trained

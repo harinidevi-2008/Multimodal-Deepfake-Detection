@@ -19,6 +19,8 @@ reserves `evidence` for the contract's evidence block.
 
 from pathlib import Path
 
+from api.errors import InferenceFailedError
+
 MODALITY_LABELS = {
     "visual": "Visual",
     "audio": "Audio",
@@ -123,6 +125,11 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
     analyzed_at: ISO-8601 timestamp string server.py generated at the
         time the request was handled.
     """
+    if not isinstance(result, dict) or not result.get("evidence"):
+        raise InferenceFailedError(
+            "Inference returned an incomplete result.",
+            details="The backend did not return the required scoring fields.",
+        )
     evidence_report = result["evidence"]
     fps = meta.get("fps") or 0.0
 

@@ -26,8 +26,12 @@ Reused, not reimplemented:
 """
 
 import logging
+import multiprocessing
+import os
+import queue
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -36,6 +40,7 @@ from api.errors import (
     CorruptVideoError,
     FeatureExtractionFailedError,
     InferenceFailedError,
+    AnalysisTimeoutError,
     MissingCheckpointAPIError,
 )
 from api.jobs import RELATIVE_FEATURE_PATH, Job
@@ -49,6 +54,7 @@ INFERENCE_DIR = REPO_ROOT / "inference"
 AUDIO_RUNNER = Path(__file__).resolve().parent / "runners" / "run_audio_extract.py"
 
 AUDIO_EXTRACT_TIMEOUT_SECONDS = 300
+ANALYSIS_TIMEOUT_SECONDS = int(os.environ.get("DFD_ANALYSIS_TIMEOUT_SECONDS", "900"))
 
 # ---------------------------------------------------------------------
 # sys.path bootstrap (main process only - audio/src is deliberately
@@ -153,17 +159,24 @@ def _extract_visual(video_path: Path, job: Job):
 
 def _extract_audio(video_path: Path, job: Job):
     out_path = job.feature_path(job.audio_root)
-    proc = subprocess.run(
-        [sys.executable, str(AUDIO_RUNNER), str(video_path), str(out_path)],
-        capture_output=True,
-        text=True,
-        timeout=AUDIO_EXTRACT_TIMEOUT_SECONDS,
-    )
-    if proc.returncode != 0:
-        reason = (proc.stderr or proc.stdout or "unknown error").strip()[-500:]
+    try:
+        subprocess.run(
+            [sys.executable, str(AUDIO_RUNNER), str(video_path), str(out_path)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=AUDIO_EXTRACT_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise FeatureExtractionFailedError(
+            "Audio feature extraction timed out.",
+            details=f"audio extraction exceeded {AUDIO_EXTRACT_TIMEOUT_SECONDS} seconds.",
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        reason = (exc.stderr or exc.stdout or "unknown error").strip()[-500:]
         raise FeatureExtractionFailedError(
             "Audio feature extraction failed.", details=f"audio/src/audio_stream.py subprocess: {reason}"
-        )
+        ) from exc
 
 
 def _extract_semantic(video_path: Path, job: Job):
@@ -237,7 +250,7 @@ def _extract_lipsync(video_path: Path, job: Job):
         ) from exc
 
 
-def run_raw_video_analysis(video_path: Path, job: Job) -> dict:
+def _run_raw_video_analysis(video_path: Path, job: Job) -> dict:
     """
     Full raw-video pipeline for one uploaded file, already saved at
     video_path under job.upload_dir.
@@ -264,13 +277,31 @@ def run_raw_video_analysis(video_path: Path, job: Job) -> dict:
 
     # Five per-stream extraction steps, each reusing the repo's own
     # existing extraction function - none reimplemented here.
+    stage_started = time.monotonic()
+    logger.info("[1/7] Extracting visual features...")
     _extract_visual(video_path, job)
+    logger.info("[1/7] Extracting visual features completed in %.3fs", time.monotonic() - stage_started)
+    stage_started = time.monotonic()
+    logger.info("[2/7] Extracting audio...")
     _extract_audio(video_path, job)
+    logger.info("[2/7] Extracting audio completed in %.3fs", time.monotonic() - stage_started)
+    stage_started = time.monotonic()
+    logger.info("[3/7] Semantic embedding...")
     _extract_semantic(video_path, job)
+    logger.info("[3/7] Semantic embedding completed in %.3fs", time.monotonic() - stage_started)
+    stage_started = time.monotonic()
+    logger.info("[4/7] Blink analysis...")
     blink_events, blink_timeline = _extract_blink(video_path, job)
+    logger.info("[4/7] Blink analysis completed in %.3fs", time.monotonic() - stage_started)
+    stage_started = time.monotonic()
+    logger.info("[5/7] Lip-sync analysis...")
     _extract_lipsync(video_path, job)
+    logger.info("[5/7] Lip-sync analysis completed in %.3fs", time.monotonic() - stage_started)
 
     try:
+        stage_started = time.monotonic()
+        logger.info("[6/7] Loading checkpoints...")
+        logger.info("[7/7] Running fusion inference...")
         result = run_full_inference(
             str(RELATIVE_FEATURE_PATH),
             visual_root=str(job.visual_root),
@@ -289,6 +320,8 @@ def run_raw_video_analysis(video_path: Path, job: Job) -> dict:
             frame_output_dir=str(job.evidence_dir),
             blink_events=blink_events,
         )
+        logger.info("[6/7] Loading checkpoints completed in %.3fs", time.monotonic() - stage_started)
+        logger.info("[7/7] Running fusion inference completed in %.3fs", time.monotonic() - stage_started)
     except MissingCheckpointError as exc:
         # Expected, correct, by-design: real training has not yet
         # produced these checkpoints. Never faked, never downgraded to
@@ -333,3 +366,81 @@ def run_raw_video_analysis(video_path: Path, job: Job) -> dict:
     result["_blink_timeline"] = blink_timeline
 
     return result, meta
+
+
+def _analysis_worker(video_path, job_id, result_queue):
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    try:
+        result_queue.put(("ok", _run_raw_video_analysis(Path(video_path), Job(job_id))))
+    except MissingCheckpointError as exc:
+        result_queue.put(("missing_checkpoint", str(exc)))
+    except (MissingFeatureFileError, FeatureShapeError) as exc:
+        result_queue.put(("feature_error", str(exc)))
+    except Exception as exc:  # noqa: BLE001
+        result_queue.put(("error", repr(exc)))
+
+
+def _missing_checkpoint_paths():
+    paths = (
+        DEFAULT_VISUAL_CLASSIFIER_WEIGHTS,
+        DEFAULT_AUDIO_CLASSIFIER_WEIGHTS,
+        DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS,
+        DEFAULT_ENHANCED_FUSION_WEIGHTS,
+    )
+    return [path for path in paths if not (REPO_ROOT / path).is_file()]
+
+
+def run_raw_video_analysis(video_path: Path, job: Job) -> dict:
+    missing = _missing_checkpoint_paths()
+    if missing:
+        logger.error("Required checkpoints missing: %s", missing)
+        raise MissingCheckpointAPIError(
+            "Required trained model checkpoint not found.", details=missing
+        )
+
+    context = multiprocessing.get_context("spawn")
+    result_queue = context.Queue()
+    process = context.Process(
+        target=_analysis_worker,
+        args=(str(video_path), job.job_id, result_queue),
+    )
+    started_at = time.monotonic()
+    logger.info("Raw-video analysis started at %.3f", started_at)
+    process.start()
+    process.join(ANALYSIS_TIMEOUT_SECONDS)
+    if process.is_alive():
+        logger.error("Raw-video analysis timed out after %ss; terminating worker", ANALYSIS_TIMEOUT_SECONDS)
+        process.terminate()
+        process.join(5)
+        raise AnalysisTimeoutError(
+            "Analysis timed out while running the backend pipeline.",
+            details=f"The request exceeded the {ANALYSIS_TIMEOUT_SECONDS}-second analysis limit.",
+        )
+
+    try:
+        status, payload = result_queue.get(timeout=2)
+    except queue.Empty:
+        raise InferenceFailedError(
+            "Inference failed on the backend.",
+            details="The analysis worker exited without returning a result.",
+        )
+    finally:
+        result_queue.close()
+        result_queue.join_thread()
+
+    logger.info("Raw-video analysis ended at %.3f", time.monotonic())
+    if status == "ok":
+        return payload
+    if status == "missing_checkpoint":
+        raise MissingCheckpointAPIError(
+            "Required trained model checkpoint not found.", details=[payload]
+        )
+    if status == "feature_error":
+        raise InferenceFailedError(
+            "Inference failed due to an internal feature-preparation error.",
+            details="See the backend server logs for the full error.",
+        )
+    raise InferenceFailedError(
+        "Inference failed on the backend.",
+        details="See the backend server logs for the full error.",
+    )
