@@ -1,14 +1,22 @@
+import sys
+from pathlib import Path
+
 import numpy as np
 import torch
 
 from fusion_model import FusionModel
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from env_defaults import DEFAULT_AUDIO_ROOT, DEFAULT_FUSION_WEIGHTS, DEFAULT_SEMANTIC_ROOT, DEFAULT_VISUAL_ROOT  # noqa: E402
 
-VISUAL_ROOT = r"visual/data/features_aligned"
-AUDIO_ROOT = r"audio/data/features"
-SEMANTIC_ROOT = r"C:\Deepfake_Features\semantic_features"
+# Defaults now come from env_defaults.py (overridable via DFD_VISUAL_ROOT /
+# DFD_AUDIO_ROOT / DFD_SEMANTIC_ROOT / DFD_FUSION_WEIGHTS env vars) instead
+# of a hardcoded machine-specific semantic path.
+VISUAL_ROOT = DEFAULT_VISUAL_ROOT
+AUDIO_ROOT = DEFAULT_AUDIO_ROOT
+SEMANTIC_ROOT = DEFAULT_SEMANTIC_ROOT
 
-MODEL_PATH = r"fusion/best_fusion_model.pt"
+MODEL_PATH = DEFAULT_FUSION_WEIGHTS
 
 
 def load_features(visual_path, audio_path, semantic_path):

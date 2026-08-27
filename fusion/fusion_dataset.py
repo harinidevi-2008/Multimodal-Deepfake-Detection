@@ -3,6 +3,11 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+try:
+    from .split_utils import load_split, split_of
+except ImportError:
+    from split_utils import load_split, split_of
+
 
 class FusionDataset(Dataset):
 
@@ -10,11 +15,25 @@ class FusionDataset(Dataset):
         self,
         visual_root,
         audio_root,
-        semantic_root
+        semantic_root,
+        split_path=None,
+        split_name="all",
     ):
+        """
+        split_path / split_name: OPTIONAL, default to None / "all" so
+        existing callers that only pass the three roots keep their
+        original behavior (every aligned sample included) unchanged.
+        Pass split_path=<path to fusion/data_split.json> and
+        split_name in {"train", "validation", "test"} to restrict this
+        dataset to one persisted split (see fusion/create_split.py and
+        fusion/split_utils.py).
+        """
         self.visual_root = Path(visual_root)
         self.audio_root = Path(audio_root)
         self.semantic_root = Path(semantic_root)
+        self.split_name = split_name
+
+        split_data = load_split(split_path) if split_path is not None else None
 
         self.samples = []
 
@@ -47,6 +66,10 @@ class FusionDataset(Dataset):
             else:
                 continue
 
+            if split_data is not None and split_name != "all":
+                if split_of(relative_path, split_data) != split_name:
+                    continue
+
             self.samples.append(
                 (
                     visual_file,
@@ -56,7 +79,8 @@ class FusionDataset(Dataset):
                 )
             )
 
-        print(f"Fusion samples: {len(self.samples)}")
+        split_suffix = f", split='{split_name}'" if split_data is not None else ""
+        print(f"Fusion samples: {len(self.samples)}{split_suffix}")
 
     def __len__(self):
         return len(self.samples)

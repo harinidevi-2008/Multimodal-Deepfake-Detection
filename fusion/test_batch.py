@@ -1,3 +1,16 @@
+"""
+Manual real-data integration script exercising FusionDataset +
+FusionModel through a real DataLoader batch (3-modal baseline).
+
+NOT a synthetic pytest unit test: it points at real, machine-specific
+feature directories (including a hardcoded Windows semantic-features
+path). Guarded under `if __name__ == "__main__":`, so pytest can
+safely import this module (0 tests collected) without executing it.
+
+Run directly, after adjusting the paths below for your machine:
+    python fusion/test_batch.py
+"""
+
 import torch
 from torch.utils.data import DataLoader
 

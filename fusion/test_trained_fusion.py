@@ -1,3 +1,18 @@
+"""
+Manual real-data integration script that loads a real trained
+checkpoint (3-modal baseline FusionModel) and runs it against one real
+aligned sample from FusionDataset.
+
+NOT a synthetic pytest unit test: it requires a real trained
+checkpoint file and real, machine-specific feature directories
+(including a hardcoded Windows semantic-features path). Guarded under
+`if __name__ == "__main__":`, so pytest can safely import this module
+(0 tests collected) without executing it.
+
+Run directly, after adjusting the paths below for your machine:
+    python fusion/test_trained_fusion.py
+"""
+
 import numpy as np
 import torch
 

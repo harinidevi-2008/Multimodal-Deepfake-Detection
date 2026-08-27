@@ -2,10 +2,10 @@ import logging
 from pathlib import Path
 
 try:
-    from .config import OUTPUT_FOLDER, configure_logging
+    from .config import OUTPUT_FOLDER, VIDEO_FOLDER, configure_logging
     from .process_video import process_video
 except ImportError:
-    from config import OUTPUT_FOLDER, configure_logging
+    from config import OUTPUT_FOLDER, VIDEO_FOLDER, configure_logging
     from process_video import process_video
 
 logger = logging.getLogger(__name__)

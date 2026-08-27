@@ -1,3 +1,17 @@
+"""
+Manual real-data integration script that loads three fixed .npy
+feature files from fusion/test_data/ (3-modal baseline) and runs them
+through FusionModel.
+
+NOT a synthetic pytest unit test: it requires those real feature files
+to already exist on disk (they are not part of this repo checkout).
+Guarded under `if __name__ == "__main__":`, so pytest can safely
+import this module (0 tests collected) without executing it.
+
+Run directly, once fusion/test_data/{visual,audio,semantic}.npy exist:
+    python fusion/test_real_features.py
+"""
+
 import numpy as np
 import torch
 

@@ -6,6 +6,13 @@ prefix) - extended to also require blink and lipsync feature files.
 
 This is a NEW file, not a modification of fusion_dataset.py - the
 original 3-modality dataset stays available and usable on its own.
+
+Optional split_path/split_name restrict the dataset to one persisted
+split (fusion/create_split.py / fusion/data_split.json); optional
+normalization_stats applies train-only blink/lipsync normalization
+(fusion/feature_normalization.py) at __getitem__ time. Both default to
+"do nothing", so existing callers that only pass the five roots are
+unaffected.
 """
 
 from pathlib import Path
@@ -14,15 +21,36 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+try:
+    from .split_utils import load_split, split_of
+    from .feature_normalization import apply_normalization
+except ImportError:
+    from split_utils import load_split, split_of
+    from feature_normalization import apply_normalization
+
 
 class EnhancedFusionDataset(Dataset):
 
-    def __init__(self, visual_root, audio_root, semantic_root, blink_root, lipsync_root):
+    def __init__(
+        self,
+        visual_root,
+        audio_root,
+        semantic_root,
+        blink_root,
+        lipsync_root,
+        split_path=None,
+        split_name="all",
+        normalization_stats=None,
+    ):
         self.visual_root = Path(visual_root)
         self.audio_root = Path(audio_root)
         self.semantic_root = Path(semantic_root)
         self.blink_root = Path(blink_root)
         self.lipsync_root = Path(lipsync_root)
+        self.split_name = split_name
+        self.normalization_stats = normalization_stats
+
+        split_data = load_split(split_path) if split_path is not None else None
 
         self.samples = []
 
@@ -48,11 +76,17 @@ class EnhancedFusionDataset(Dataset):
             else:
                 continue
 
+            if split_data is not None and split_name != "all":
+                if split_of(relative_path, split_data) != split_name:
+                    continue
+
             self.samples.append(
                 (visual_file, audio_file, semantic_file, blink_file, lipsync_file, label)
             )
 
-        print(f"Enhanced fusion samples: {len(self.samples)}")
+        split_suffix = f", split='{split_name}'" if split_data is not None else ""
+        norm_suffix = ", normalized blink/lipsync" if normalization_stats is not None else ""
+        print(f"Enhanced fusion samples: {len(self.samples)}{split_suffix}{norm_suffix}")
 
     def __len__(self):
         return len(self.samples)
@@ -65,6 +99,10 @@ class EnhancedFusionDataset(Dataset):
         semantic = np.load(semantic_file).astype(np.float32)
         blink = np.load(blink_file).astype(np.float32)
         lipsync = np.load(lipsync_file).astype(np.float32)
+
+        if self.normalization_stats is not None:
+            blink = apply_normalization(blink, self.normalization_stats["blink"])
+            lipsync = apply_normalization(lipsync, self.normalization_stats["lipsync"])
 
         return (
             torch.from_numpy(visual),

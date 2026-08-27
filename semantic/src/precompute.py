@@ -38,9 +38,14 @@ from sentence_transformers import SentenceTransformer
 # ── AUTO-DETECT PATHS ─────────────────────────────────────────────
 # All paths are relative to the location of this script.
 # No hardcoded C:\Users\... paths.
+# FEATURES_DIR mirrors the visual/audio streams' convention
+# (<stream>/data/<features>), so the default here lines up with what
+# eval/run_full_evaluation.py, classifiers/*, and the README all expect
+# at "semantic/data/features" -- previously this pointed at
+# semantic/src/features/semantic, which nothing downstream looked at.
 SCRIPT_DIR    = Path(__file__).resolve().parent
 DATASET_PATH  = SCRIPT_DIR / "FakeAVCeleb_v1.2"
-FEATURES_DIR  = SCRIPT_DIR / "features" / "semantic"
+FEATURES_DIR  = SCRIPT_DIR.parent / "data" / "features"
 METADATA_FILE = FEATURES_DIR / "metadata.json"
 
 # ── CONFIGURATION ─────────────────────────────────────────────────

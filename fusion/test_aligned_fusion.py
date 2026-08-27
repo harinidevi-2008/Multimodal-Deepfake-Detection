@@ -1,3 +1,19 @@
+"""
+Manual real-data integration script that pulls one real, aligned
+sample straight off disk (3-modal baseline) and runs it through
+FusionModel.
+
+NOT a synthetic pytest unit test: VISUAL_ROOT/AUDIO_ROOT/SEMANTIC_ROOT
+below point at real, machine-specific feature directories (including
+a hardcoded Windows semantic-features path) and this script requires
+at least one real extracted visual feature file to exist. Guarded
+under `if __name__ == "__main__":`, so pytest can safely import this
+module (0 tests collected) without executing it.
+
+Run directly, after adjusting the paths below for your machine:
+    python fusion/test_aligned_fusion.py
+"""
+
 import numpy as np
 import torch
 from pathlib import Path

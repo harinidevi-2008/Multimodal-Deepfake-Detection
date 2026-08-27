@@ -1,3 +1,19 @@
+"""
+Manual real-data integration script for the original 3-modal
+FusionDataset (visual+audio+semantic baseline).
+
+NOT a synthetic pytest unit test: it points at real, machine-specific
+feature directories (including a hardcoded Windows semantic-features
+path) and a populated FakeAVCeleb-derived feature tree, so it only
+does something useful on a machine that already has those features
+extracted. It is guarded under `if __name__ == "__main__":`, so
+pytest can safely import this module (0 tests collected) without
+executing it.
+
+Run directly, after adjusting the paths below for your machine:
+    python fusion/test_dataset.py
+"""
+
 from fusion_dataset import FusionDataset
 
 

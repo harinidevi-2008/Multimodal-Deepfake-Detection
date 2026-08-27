@@ -264,10 +264,16 @@ def analyze_blinks(video_path, max_fps=None):
             blink_count (int)
             blink_rate_per_min (float)
             average_blink_duration_sec (float)
-            blink_irregularity_score (float, 0-1)
-            blink_anomaly_score (float, 0-1) - alias of blink_irregularity_score,
-                kept for compatibility with the evidence-layer schema
+            blink_irregularity_score (float, 0-1) - rule-based anomaly score,
+                not a learned probability (see evidence/evidence_builder.py's
+                terminology notes)
             blink_status (str): "Normal" or "Abnormal"
+
+    Note: an earlier version of this function also returned
+    "blink_anomaly_score" as a duplicate alias of blink_irregularity_score.
+    It has been removed - nothing in this repository reads it by that
+    key (confirmed via eye_blink_manual.py), and evidence_builder.py now
+    reads blink_irregularity_score directly.
     """
 
     ear_data = compute_ear_series(video_path, max_fps=max_fps)
@@ -292,6 +298,5 @@ def analyze_blinks(video_path, max_fps=None):
         "blink_rate_per_min": round(blink_rate, 2),
         "average_blink_duration_sec": round(avg_duration_sec, 4),
         "blink_irregularity_score": irregularity_score,
-        "blink_anomaly_score": irregularity_score,
         "blink_status": status,
     }

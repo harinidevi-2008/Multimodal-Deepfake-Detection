@@ -1,8 +1,35 @@
+import argparse
 import os
 from pathlib import Path
 
-# ── CHANGE THIS to wherever you extracted FakeAVCeleb_v1 ──────
-DATASET_PATH = r"C:\Users\ASUS\semantic_stream\FakeAVCeleb_v1.2"
+# Previously hardcoded to a single developer's machine
+# (r"C:\Users\ASUS\semantic_stream\FakeAVCeleb_v1.2"), which broke for
+# anyone else who cloned the repo. Resolution order, matching the
+# DFD_*_ROOT environment-variable convention used elsewhere in this
+# repo (see fusion/env_defaults.py):
+#   1. a CLI argument:      python explore_dataset.py /path/to/FakeAVCeleb_v1.2
+#   2. the DFD_RAW_DATASET_PATH environment variable
+#   3. a repo-relative default of <repo_root>/FakeAVCeleb_v1.2, matching
+#      the convention audio/src/config.py already uses for the same
+#      raw dataset directory.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_DATASET_PATH = os.environ.get("DFD_RAW_DATASET_PATH", str(REPO_ROOT / "FakeAVCeleb_v1.2"))
+
+_parser = argparse.ArgumentParser(
+    description="Explore the FakeAVCeleb raw video dataset directory structure."
+)
+_parser.add_argument(
+    "dataset_path",
+    nargs="?",
+    default=DEFAULT_DATASET_PATH,
+    help=(
+        "Path to the extracted FakeAVCeleb_v1.2 root. Defaults to the "
+        "DFD_RAW_DATASET_PATH environment variable, or "
+        f"'{DEFAULT_DATASET_PATH}' if that is not set."
+    ),
+)
+_args = _parser.parse_args()
+DATASET_PATH = _args.dataset_path
 
 dataset = Path(DATASET_PATH)
 

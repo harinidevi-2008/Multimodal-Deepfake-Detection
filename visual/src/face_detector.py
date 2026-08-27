@@ -24,14 +24,27 @@ logger = logging.getLogger(__name__)
 
 device = "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
 
-mtcnn = None
-if MTCNN is not None:
-    mtcnn = MTCNN(
-        image_size=224,
-        margin=20,
-        post_process=True,
-        device=device
-    )
+# MTCNN is built lazily (see _get_mtcnn() below), not at import time.
+# facenet-pytorch downloads pretrained P-Net/R-Net/O-Net weights the
+# first time MTCNN(...) is constructed - building it eagerly at module
+# level meant simply importing this module (transitively, via
+# visual/src/__init__.py) triggered that network download.
+_mtcnn = None
+
+
+def _get_mtcnn():
+    """Builds (and caches) the MTCNN face detector on first use."""
+    global _mtcnn
+    if _mtcnn is None:
+        if MTCNN is None:
+            raise ModuleNotFoundError("OpenCV and facenet-pytorch are required to detect faces.")
+        _mtcnn = MTCNN(
+            image_size=224,
+            margin=20,
+            post_process=True,
+            device=device
+        )
+    return _mtcnn
 
 
 def get_aligned_face(frame_bgr):
@@ -45,9 +58,10 @@ def get_aligned_face(frame_bgr):
         torch.Tensor or None
     """
 
-    if cv2 is None or mtcnn is None:
+    if cv2 is None:
         raise ModuleNotFoundError("OpenCV and facenet-pytorch are required to detect faces.")
 
+    mtcnn = _get_mtcnn()
     frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     return mtcnn(frame_rgb)
 
