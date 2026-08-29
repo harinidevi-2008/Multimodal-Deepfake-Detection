@@ -18,6 +18,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from api.errors import (
     FileTooLargeError,
@@ -113,11 +114,10 @@ async def analyze(video: UploadFile = File(None)):
             analyzed_at=analyzed_at,
         )
     finally:
-        # The uploaded video itself is never needed again after this
-        # request (evidence frames were already extracted into
-        # job.evidence_dir, which is kept) - deleting it keeps
-        # runtime/jobs from accumulating full video copies.
-        job.cleanup_upload()
+        # Keep the upload until the job directory expires so the UI can
+        # replay genuine source audio/video for evidence review. Old
+        # jobs are still cleaned up by sweep_old_jobs().
+        pass
 
 
 @app.get("/api/evidence/{job_id}/{filename}")
@@ -140,6 +140,29 @@ async def get_evidence(job_id: str, filename: str):
     if not candidate.is_file():
         raise NotFoundError("No such evidence file.")
 
-    from fastapi.responses import FileResponse
-
     return FileResponse(str(candidate), media_type="image/jpeg")
+
+
+@app.get("/api/media/{job_id}")
+async def get_media(job_id: str):
+    if not job_id.isalnum():
+        raise NotFoundError("No such job.")
+
+    upload_dir = (JOBS_ROOT / job_id / "upload").resolve()
+    if not upload_dir.is_dir():
+        raise NotFoundError("No such media file.")
+
+    candidates = [path for path in upload_dir.iterdir() if path.is_file()]
+    if len(candidates) != 1:
+        raise NotFoundError("No such media file.")
+
+    media_type_by_suffix = {
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".avi": "video/x-msvideo",
+    }
+    media_path = candidates[0]
+    return FileResponse(
+        str(media_path),
+        media_type=media_type_by_suffix.get(media_path.suffix.lower(), "application/octet-stream"),
+    )

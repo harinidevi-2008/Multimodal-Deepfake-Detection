@@ -433,6 +433,17 @@ def run_full_inference(
         "attention": attention,
         "attention_summary": attention_summary,
         "modality_contributions": contribution,
+        "fusion_diagnostics": {
+            "raw_logits": [round(float(value), 6) for value in logits[0].cpu().tolist()],
+            "softmax_probabilities": {
+                "real": round(final_real_probability, 6),
+                "fake": round(final_fake_probability, 6),
+            },
+            "class_indices": {"real": 0, "fake": 1},
+            "predicted_class_index": 1 if prediction == "DEEPFAKE" else 0,
+            "predicted_class": prediction,
+            "modality_order": list(MODALITY_ORDER_5),
+        },
         "evidence": evidence,
         "frame_evidence": frame_evidence,
         "window_evidence": window_evidence,

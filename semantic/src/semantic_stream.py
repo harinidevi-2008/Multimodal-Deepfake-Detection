@@ -77,6 +77,7 @@ class SemanticStream:
                 "text": transcript,
                 "confidence": confidence,
                 "language": result.get("language", "unknown"),
+                "segments": segments,
                 "reliable": confidence > -1.0,
                 "failed": False
             }
@@ -123,6 +124,8 @@ class SemanticStream:
             "embedding_384": embedding_384,
             "transcript": transcript_result["text"],
             "confidence": transcript_result["confidence"],
+            "language": transcript_result.get("language", "unknown"),
+            "segments": transcript_result.get("segments", []),
             "reliable": transcript_result["reliable"]
         }
 

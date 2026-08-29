@@ -5,7 +5,15 @@ import { resolveEvidenceUrl } from '../api/client'
 
 const REASON_LABEL = {
   eye_blink_event: 'Blink event',
-  uniform_sample: 'Sampled frame'
+  uniform_sample: 'Supporting visual sample'
+}
+
+const EVIDENCE_TYPE_LABEL = {
+  localized_visual_artifact: 'Localized visual artifact',
+  supporting_context: 'Supporting visual sample',
+  blink_event: 'Blink event',
+  lip_sync_event: 'Lip-sync event',
+  other: 'Other'
 }
 
 // Backend frame evidence may arrive as a data: URI (mock fixtures) or a
@@ -54,14 +62,24 @@ export default function FrameViewer({ frames }) {
           <Badge tone={frame.frame_selection_reason === 'eye_blink_event' ? 'warning' : 'neutral'}>
             {REASON_LABEL[frame.frame_selection_reason] || frame.frame_selection_reason}
           </Badge>
+          <Badge tone={frame.evidence_type === 'localized_visual_artifact' ? 'warning' : 'neutral'}>
+            {EVIDENCE_TYPE_LABEL[frame.evidence_type] || frame.evidence_type || 'Context'}
+          </Badge>
           <Badge tone="neutral">frame #{frame.frame_index}</Badge>
         </div>
       </div>
 
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11.5, color: 'var(--text-muted)' }}>
+        <span><strong>Timestamp:</strong> {formatSeconds(frame.timestamp_seconds)}</span>
+        <span><strong>Reason:</strong> {REASON_LABEL[frame.frame_selection_reason] || frame.frame_selection_reason || 'Supporting visual sample'}</span>
+        <span><strong>Evidence:</strong> {EVIDENCE_TYPE_LABEL[frame.evidence_type] || frame.evidence_type || 'Supporting visual sample'}</span>
+        {frame.confidence != null && <span><strong>Confidence:</strong> {Number(frame.confidence).toFixed(2)}</span>}
+        {frame.strength && <span><strong>Strength:</strong> {frame.strength}</span>}
+      </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-        {frame.detected_artifact == null
-          ? "No localized visual-artifact detector is wired up yet — this frame is shown as supporting context for the verdict, not as proof of manipulation on its own."
-          : frame.detected_artifact}
+        {frame.explanation || (frame.detected_artifact == null
+          ? 'Visual artifact localization is unavailable. This is a supporting visual sample and is not proof of manipulation.'
+          : frame.detected_artifact)}
       </p>
 
       <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>

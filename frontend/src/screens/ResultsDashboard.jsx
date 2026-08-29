@@ -37,7 +37,7 @@ export default function ResultsDashboard({ result, onReset }) {
       <EvidenceViewer evidence={result.evidence} />
 
       <div className="section-heading">
-        <h2>Contextual analysis</h2>
+        <h2>Why this verdict?</h2>
       </div>
       <ContextualAnalysis contextualAnalysis={result.contextual_analysis} />
 

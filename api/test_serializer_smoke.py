@@ -195,6 +195,18 @@ def main():
         else:
             print("[INFO] evidence.frames is empty/omitted for this run (see frame_evidence count above).")
 
+        modality_explanations = response.get("contextual_analysis", {}).get("modality_explanations", [])
+        if not modality_explanations or len(modality_explanations) != 5:
+            print(f"[FAIL] contextual_analysis.modality_explanations missing or incomplete: {modality_explanations!r}")
+            sys.exit(1)
+        for item in modality_explanations:
+            required = {"modality", "label", "supports", "strength", "signal_meaning", "limitation", "explanation"}
+            missing = sorted(required - set(item.keys()))
+            if missing:
+                print(f"[FAIL] modality explanation missing required keys {missing}: {item!r}")
+                sys.exit(1)
+        print("[PASS] contextual_analysis.modality_explanations includes all 5 modalities with honest signal explanations.")
+
         if "audio_waveform" in response["evidence"]:
             print("[FAIL] audio_waveform must be omitted entirely - no genuine envelope is computed anywhere in this pipeline.")
             sys.exit(1)

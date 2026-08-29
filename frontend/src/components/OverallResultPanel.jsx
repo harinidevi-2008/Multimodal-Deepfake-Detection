@@ -6,6 +6,7 @@ export default function OverallResultPanel({ result }) {
   const isFake = result.final_verdict === 'LIKELY_DEEPFAKE'
   const fakePct = result.final_fake_probability
   const realPct = result.final_real_probability
+  const showReview = result.review_recommended || result.evidence_consistency === 'LOW'
 
   return (
     <div
@@ -34,11 +35,25 @@ export default function OverallResultPanel({ result }) {
                 Low confidence
               </Badge>
             )}
+            {showReview && (
+              <Badge tone="warning" dot>
+                Review recommended
+              </Badge>
+            )}
           </div>
           <p style={{ color: 'var(--text-secondary)', fontSize: 13.5, maxWidth: 420 }}>
             {result.video_filename} · {result.video_duration_seconds.toFixed(1)}s analyzed in{' '}
             {result.processing_time_seconds.toFixed(1)}s
           </p>
+          {(result.evidence_consistency || result.modality_disagreement) && (
+            <div className="callout" style={{ fontSize: 12.5 }}>
+              <span className="callout-strong">Evidence consistency: </span>
+              {result.evidence_consistency || 'unknown'}
+              <span style={{ marginLeft: 12 }} />
+              <span className="callout-strong">Modality disagreement: </span>
+              {result.modality_disagreement || 'unknown'}
+            </div>
+          )}
         </div>
 
         <div className="stack" style={{ gap: 'var(--space-3)' }}>

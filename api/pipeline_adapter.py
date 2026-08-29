@@ -26,11 +26,13 @@ Reused, not reimplemented:
 """
 
 import logging
+import json
 import multiprocessing
 import os
 import queue
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -178,6 +180,80 @@ def _extract_audio(video_path: Path, job: Job):
             "Audio feature extraction failed.", details=f"audio/src/audio_stream.py subprocess: {reason}"
         ) from exc
 
+    return _extract_audio_evidence(video_path)
+
+
+def _extract_audio_evidence(video_path: Path):
+    """Return a compact real RMS envelope; it does not identify anomalies."""
+    wav_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+            wav_path = Path(temp_file.name)
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(video_path), "-ac", "1", "-ar", "16000", "-vn", str(wav_path)],
+            capture_output=True, text=True, check=True, timeout=AUDIO_EXTRACT_TIMEOUT_SECONDS,
+        )
+        import librosa
+        waveform, sample_rate = librosa.load(str(wav_path), sr=16000)
+        if waveform.size == 0:
+            return {"status": "unavailable"}
+        point_count = min(256, max(1, waveform.size // max(1, sample_rate // 20)))
+        chunks = np.array_split(np.abs(waveform), point_count)
+        envelope = np.asarray([float(np.sqrt(np.mean(chunk ** 2))) for chunk in chunks], dtype=np.float32)
+        peak = float(envelope.max())
+        if peak > 0:
+            envelope /= peak
+        return {
+            "status": "global_only",
+            "sample_rate_hz": sample_rate,
+            "duration_seconds": round(float(waveform.size / sample_rate), 3),
+            "envelope": [round(float(value), 5) for value in envelope],
+            "timestamps_seconds": [round(float(i * waveform.size / sample_rate / len(envelope)), 3)
+                                   for i in range(len(envelope))],
+            "localized_windows": [],
+            "localization_note": "Audio classifier evidence is global only; no timestamped suspicious audio intervals were produced.",
+        }
+    except Exception as exc:  # noqa: BLE001 - waveform is optional evidence
+        logger.warning("Audio envelope unavailable: %s", exc)
+        return {"status": "unavailable"}
+    finally:
+        if wav_path is not None:
+            wav_path.unlink(missing_ok=True)
+
+
+def feature_health(path, modality):
+    """Summarize one generated feature without changing inference behavior."""
+    path = Path(path)
+    health = {"modality": modality, "path": str(path.resolve()), "missing": not path.is_file()}
+    if health["missing"]:
+        health.update({"valid": False, "status": "missing", "shape": None, "dtype": None,
+                       "min": None, "max": None, "mean": None, "std": None,
+                       "finite": False, "zero_fraction": None})
+        return health
+    try:
+        array = np.asarray(np.load(path))
+        finite = bool(np.isfinite(array).all())
+        zero_fraction = float(np.mean(array == 0)) if array.size else 1.0
+        near_zero = bool(array.size == 0 or np.max(np.abs(array)) <= 1e-8)
+        valid = bool(array.size and finite and not near_zero)
+        status = "zero_embedding" if modality == "semantic" and near_zero else ("degraded" if not valid else "valid")
+        health.update({"valid": valid, "status": status, "shape": list(array.shape),
+                       "dtype": str(array.dtype), "min": float(np.min(array)) if array.size else None,
+                       "max": float(np.max(array)) if array.size else None,
+                       "mean": float(np.mean(array)) if array.size else None,
+                       "std": float(np.std(array)) if array.size else None,
+                       "finite": finite, "zero_fraction": zero_fraction})
+        logger.info("Feature health %s: shape=%s dtype=%s min=%s max=%s mean=%s std=%s finite=%s zero_fraction=%.4f status=%s",
+                    modality, health["shape"], health["dtype"], health["min"], health["max"],
+                    health["mean"], health["std"], finite, zero_fraction, status)
+        if not valid:
+            logger.warning("Feature health warning for %s: %s", modality, status)
+        return health
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Feature health failed for %s: %s", modality, exc)
+        health.update({"valid": False, "status": "invalid", "error": str(exc)})
+        return health
+
 
 def _extract_semantic(video_path: Path, job: Job):
     out_path = job.feature_path(job.semantic_root)
@@ -186,6 +262,13 @@ def _extract_semantic(video_path: Path, job: Job):
         result = stream.extract_features(str(video_path))
         embedding = result["embedding_384"].detach().cpu().numpy().astype(np.float32)
         np.save(out_path, embedding)
+        return {
+            "transcript": result.get("transcript", ""),
+            "confidence": result.get("confidence"),
+            "reliable": result.get("reliable", False),
+            "language": result.get("language", "unknown"),
+            "segments": result.get("segments", []),
+        }
     except Exception as exc:  # noqa: BLE001
         raise FeatureExtractionFailedError(
             "Semantic feature extraction failed.", details=f"semantic/src/semantic_stream.py: {exc}"
@@ -283,11 +366,11 @@ def _run_raw_video_analysis(video_path: Path, job: Job) -> dict:
     logger.info("[1/7] Extracting visual features completed in %.3fs", time.monotonic() - stage_started)
     stage_started = time.monotonic()
     logger.info("[2/7] Extracting audio...")
-    _extract_audio(video_path, job)
+    audio_evidence = _extract_audio(video_path, job)
     logger.info("[2/7] Extracting audio completed in %.3fs", time.monotonic() - stage_started)
     stage_started = time.monotonic()
     logger.info("[3/7] Semantic embedding...")
-    _extract_semantic(video_path, job)
+    semantic_metadata = _extract_semantic(video_path, job)
     logger.info("[3/7] Semantic embedding completed in %.3fs", time.monotonic() - stage_started)
     stage_started = time.monotonic()
     logger.info("[4/7] Blink analysis...")
@@ -297,6 +380,17 @@ def _run_raw_video_analysis(video_path: Path, job: Job) -> dict:
     logger.info("[5/7] Lip-sync analysis...")
     _extract_lipsync(video_path, job)
     logger.info("[5/7] Lip-sync analysis completed in %.3fs", time.monotonic() - stage_started)
+
+    feature_health_report = {
+        name: feature_health(path, name)
+        for name, path in {
+            "visual": job.feature_path(job.visual_root),
+            "audio": job.feature_path(job.audio_root),
+            "semantic": job.feature_path(job.semantic_root),
+            "blink": job.feature_path(job.blink_root),
+            "lipsync": job.feature_path(job.lipsync_root),
+        }.items()
+    }
 
     try:
         stage_started = time.monotonic()
@@ -364,6 +458,10 @@ def _run_raw_video_analysis(video_path: Path, job: Job) -> dict:
     # which only returns the aggregate score) so api/serializer.py can
     # build evidence.blink_timeline without recomputing it a third time.
     result["_blink_timeline"] = blink_timeline
+    result["_blink_events"] = blink_events
+    result["_feature_health"] = feature_health_report
+    result["_semantic_metadata"] = semantic_metadata
+    result["_audio_evidence"] = audio_evidence
 
     return result, meta
 
@@ -371,13 +469,34 @@ def _run_raw_video_analysis(video_path: Path, job: Job) -> dict:
 def _analysis_worker(video_path, job_id, result_queue):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
-        result_queue.put(("ok", _run_raw_video_analysis(Path(video_path), Job(job_id))))
+        result, meta = _run_raw_video_analysis(Path(video_path), Job(job_id))
+        result_path = Job(job_id).dir / "analysis_result.json"
+        logger.info("Preparing completed analysis for IPC: %s", result_path)
+        with result_path.open("w", encoding="utf-8") as output:
+            json.dump({"result": _to_ipc_native(result), "meta": _to_ipc_native(meta)}, output)
+        logger.info("Completed analysis written for IPC: %s", result_path)
+        result_queue.put(("ok", str(result_path)))
     except MissingCheckpointError as exc:
         result_queue.put(("missing_checkpoint", str(exc)))
     except (MissingFeatureFileError, FeatureShapeError) as exc:
         result_queue.put(("feature_error", str(exc)))
     except Exception as exc:  # noqa: BLE001
         result_queue.put(("error", repr(exc)))
+
+
+def _to_ipc_native(value):
+    """Convert ML result values to small JSON-native structures before IPC."""
+    if isinstance(value, dict):
+        return {str(key): _to_ipc_native(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_ipc_native(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    if hasattr(value, "detach") and hasattr(value, "cpu"):
+        return value.detach().cpu().tolist()
+    return value
 
 
 def _missing_checkpoint_paths():
@@ -412,6 +531,7 @@ def run_raw_video_analysis(video_path: Path, job: Job) -> dict:
         logger.error("Raw-video analysis timed out after %ss; terminating worker", ANALYSIS_TIMEOUT_SECONDS)
         process.terminate()
         process.join(5)
+        (job.dir / "analysis_result.json").unlink(missing_ok=True)
         raise AnalysisTimeoutError(
             "Analysis timed out while running the backend pipeline.",
             details=f"The request exceeded the {ANALYSIS_TIMEOUT_SECONDS}-second analysis limit.",
@@ -430,7 +550,13 @@ def run_raw_video_analysis(video_path: Path, job: Job) -> dict:
 
     logger.info("Raw-video analysis ended at %.3f", time.monotonic())
     if status == "ok":
-        return payload
+        result_path = Path(payload)
+        try:
+            with result_path.open("r", encoding="utf-8") as input_file:
+                envelope = json.load(input_file)
+            return envelope["result"], envelope["meta"]
+        finally:
+            result_path.unlink(missing_ok=True)
     if status == "missing_checkpoint":
         raise MissingCheckpointAPIError(
             "Required trained model checkpoint not found.", details=[payload]

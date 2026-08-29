@@ -64,9 +64,27 @@ export default function ModalityCard({ meta, data }) {
         <Badge tone={isFlaggedStatus(data.status) ? 'warning' : 'success'}>{data.status}</Badge>
       )}
 
-      <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-        {meta.description}
-      </p>
+      {data.evidence_status && (
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          <strong>Evidence:</strong> {data.evidence_status.replaceAll('_', ' ')}
+        </div>
+      )}
+      {data.localization && (
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          <strong>Localization:</strong> {data.localization.replaceAll('_', ' ')}
+        </div>
+      )}
+      {data.explanation && (
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          {data.explanation}
+        </p>
+      )}
+
+      {(data.trust || (!data.explanation && meta.description)) && (
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          {data.trust || meta.description}
+        </p>
+      )}
     </div>
   )
 }

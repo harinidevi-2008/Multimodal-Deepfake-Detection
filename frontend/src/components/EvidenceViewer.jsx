@@ -56,14 +56,16 @@ export default function EvidenceViewer({ evidence }) {
         (hasAudio ? (
           <div className="stack" style={{ gap: 'var(--space-3)' }}>
             <p style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
-              Amplitude envelope of the extracted audio track, used as input to the audio classifier.
+              Amplitude envelope from the original uploaded video. The classifier score is global unless timestamped audio windows are shown.
             </p>
             <AudioTimeline audioWaveform={ev.audio_waveform} />
           </div>
         ) : (
           <EmptyState
             title="Audio waveform unavailable"
-            body="The audio fake probability above still comes from the real classifier — a browser-ready waveform just wasn't generated for this request."
+            body={ev.audio_evidence_status === 'global_only'
+              ? 'Audio classifier detected a global signal, but this model does not localize a specific timestamp as evidence.'
+              : 'No browser-ready audio envelope was generated for this request.'}
           />
         ))}
 
@@ -72,14 +74,17 @@ export default function EvidenceViewer({ evidence }) {
           <div className="stack" style={{ gap: 'var(--space-3)' }}>
             <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
               Per-window mismatch score between mouth motion and audio.
-              <InfoTip text="Rule-based correlation score per ~0.8s window, not a trained probability. Higher bars mean weaker correlation between lip motion and audio in that window." />
+              <InfoTip text="Rule-based correlation score per window, not a trained probability. Higher bars mean weaker correlation between lip motion and audio in that window." />
             </p>
             <LipSyncTimeline windows={ev.lip_sync_window_evidence} />
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Elevated windows are mismatch signals, not proof that the whole video is fake.
+            </p>
           </div>
         ) : (
           <EmptyState
             title="Window evidence unavailable"
-            body="The overall lip-sync mismatch score above was still computed — windowed evidence requires the raw video and could not be recovered for this request."
+            body="The overall lip-sync mismatch score above was still computed. Windowed evidence requires real per-window analysis and was not available for this request."
           />
         ))}
 
@@ -87,15 +92,20 @@ export default function EvidenceViewer({ evidence }) {
         (hasBlinkTimeline ? (
           <div className="stack" style={{ gap: 'var(--space-3)' }}>
             <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              Eye-aspect-ratio (EAR) over time — dips mark detected blink events.
+              Eye-aspect-ratio (EAR) over time - dips mark detected blink events. A blink event is not manipulation proof.
               <InfoTip text="EAR is a geometric proxy from eye-landmark tracking, not a model probability. Markers show frames flagged as blink events by the rule-based detector." />
             </p>
+            {ev.blink_events?.length > 0 && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Detected blink events: {ev.blink_events.map((event) => `${Number(event.start_seconds).toFixed(1)}-${Number(event.end_seconds).toFixed(1)}s`).join(', ')}. These are supporting context only.
+              </p>
+            )}
             <BlinkTimeline blinkTimeline={ev.blink_timeline} />
           </div>
         ) : (
           <EmptyState
             title="Blink evidence unavailable"
-            body="The blink anomaly score above was still computed — the per-frame timeline could not be extracted for this request."
+            body="The blink anomaly score above was still computed. The per-frame timeline could not be extracted for this request."
           />
         ))}
     </div>

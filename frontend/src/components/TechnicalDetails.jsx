@@ -5,6 +5,7 @@ import { toPercent } from '../utils/formatters'
 
 export default function TechnicalDetails({ result }) {
   const { attention_summary, modality_contributions, processing_time_seconds } = result
+  const diagnostics = result.fusion_diagnostics
 
   return (
     <div className="card">
@@ -34,11 +35,23 @@ export default function TechnicalDetails({ result }) {
               <span className="kv-row__key">Low-confidence flag</span>
               <span className="kv-row__value">{result.low_confidence ? 'Yes' : 'No'}</span>
             </div>
+            {diagnostics?.class_indices && (
+              <div className="kv-row">
+                <span className="kv-row__key">Class indices</span>
+                <span className="kv-row__value">real={diagnostics.class_indices.real}, fake={diagnostics.class_indices.fake}</span>
+              </div>
+            )}
+            {diagnostics?.raw_logits && (
+              <div className="kv-row">
+                <span className="kv-row__key">Raw logits</span>
+                <span className="kv-row__value">[{diagnostics.raw_logits.map((v) => Number(v).toFixed(3)).join(', ')}]</span>
+              </div>
+            )}
           </div>
 
           <div>
             <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-              Attention weights
+              Model diagnostics - attention weights
               <InfoTip text={attention_summary.note} />
             </p>
             <div className="stack" style={{ gap: 'var(--space-2)' }}>
