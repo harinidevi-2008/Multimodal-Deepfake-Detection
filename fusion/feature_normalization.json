@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "fit_on_split": "train",
+    "split_path": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\data_split.json",
+    "blink_root": "visual/data/blink_features",
+    "lipsync_root": "visual/data/lipsync_features"
+  },
+  "blink": {
+    "dims": [
+      "blink_count",
+      "blink_rate_per_min",
+      "average_blink_duration_sec",
+      "blink_irregularity_score"
+    ],
+    "mean": [
+      3.0941835306096475,
+      35.0006987140639,
+      0.5574126951922757,
+      0.31757291816327743
+    ],
+    "std": [
+      2.416488695039858,
+      24.26429100080135,
+      0.909786346006203,
+      0.2962271926971844
+    ],
+    "n_samples": 15714,
+    "flat_dims": []
+  },
+  "lipsync": {
+    "dims": [
+      "sync_score",
+      "mismatch_score"
+    ],
+    "mean": [
+      0.5358198802006431,
+      0.46418011953052146
+    ],
+    "std": [
+      0.14927314349309895,
+      0.1492731435973593
+    ],
+    "n_samples": 15714,
+    "flat_dims": []
+  }
+}

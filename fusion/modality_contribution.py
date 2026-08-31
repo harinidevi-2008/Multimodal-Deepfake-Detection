@@ -34,7 +34,8 @@ def modality_contributions(model, inputs, modality_names):
     Returns:
         {
           "baseline_fake_probability": float,
-          "contributions": {modality_name: fake_probability_drop, ...}
+          "contributions": {modality_name: fake_probability_drop, ...},
+          "ablated_fake_probabilities": {modality_name: fake_probability_with_that_input_zeroed, ...}
         }
     A positive contribution means zeroing that modality REDUCED the
     predicted fake probability (its real input was pushing the
@@ -51,14 +52,17 @@ def modality_contributions(model, inputs, modality_names):
     baseline_fake_prob = torch.softmax(baseline_logits, dim=1)[0, 1].item()
 
     contributions = {}
+    ablated_fake_probabilities = {}
     for i, name in enumerate(modality_names):
         ablated_inputs = list(inputs)
         ablated_inputs[i] = torch.zeros_like(inputs[i])
         logits, _ = model(*ablated_inputs)
         fake_prob = torch.softmax(logits, dim=1)[0, 1].item()
         contributions[name] = round(baseline_fake_prob - fake_prob, 4)
+        ablated_fake_probabilities[name] = round(fake_prob, 4)
 
     return {
         "baseline_fake_probability": round(baseline_fake_prob, 4),
         "contributions": contributions,
+        "ablated_fake_probabilities": ablated_fake_probabilities,
     }

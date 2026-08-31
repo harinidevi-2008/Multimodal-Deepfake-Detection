@@ -1,0 +1,141 @@
+{
+  "config": {
+    "epochs_requested": 50,
+    "patience": 5,
+    "batch_size": 128,
+    "lr": 0.0001,
+    "split_path": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\data_split.json",
+    "train_samples": 15714,
+    "validation_samples": 2195
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.6032378273766216,
+      "val_accuracy": 0.5685649202733485,
+      "val_precision": 0.9905982905982906,
+      "val_recall": 0.5532219570405728,
+      "val_f1": 0.7099540581929555,
+      "checkpoint_saved": true
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.4010088575807044,
+      "val_accuracy": 0.826879271070615,
+      "val_precision": 0.9863868406125922,
+      "val_recall": 0.8300715990453461,
+      "val_f1": 0.9015033696215656,
+      "checkpoint_saved": true
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.26786373628348836,
+      "val_accuracy": 0.8596810933940775,
+      "val_precision": 0.9827120475418692,
+      "val_recall": 0.8682577565632458,
+      "val_f1": 0.9219462747085656,
+      "checkpoint_saved": true
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.19856433352319205,
+      "val_accuracy": 0.8651480637813211,
+      "val_precision": 0.9854290339989207,
+      "val_recall": 0.871599045346062,
+      "val_f1": 0.9250253292806484,
+      "checkpoint_saved": true
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.14077709672775696,
+      "val_accuracy": 0.9056947608200455,
+      "val_precision": 0.9791878172588833,
+      "val_recall": 0.920763723150358,
+      "val_f1": 0.9490774907749078,
+      "checkpoint_saved": true
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.10706441301277013,
+      "val_accuracy": 0.8728929384965831,
+      "val_precision": 0.9824654622741764,
+      "val_recall": 0.8825775656324583,
+      "val_f1": 0.9298466180538094,
+      "checkpoint_saved": false
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.08294082624550031,
+      "val_accuracy": 0.8801822323462415,
+      "val_precision": 0.9815983175604627,
+      "val_recall": 0.8911694510739857,
+      "val_f1": 0.9342006504878659,
+      "checkpoint_saved": false
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.08727521728345655,
+      "val_accuracy": 0.8309794988610478,
+      "val_precision": 0.9853603603603603,
+      "val_recall": 0.8353221957040573,
+      "val_f1": 0.9041591320072333,
+      "checkpoint_saved": false
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.04628708894266104,
+      "val_accuracy": 0.910250569476082,
+      "val_precision": 0.9817258883248731,
+      "val_recall": 0.9231503579952267,
+      "val_f1": 0.9515375153751537,
+      "checkpoint_saved": true
+    },
+    {
+      "epoch": 10,
+      "train_loss": 0.05376373922899062,
+      "val_accuracy": 0.8874715261958998,
+      "val_precision": 0.9817518248175182,
+      "val_recall": 0.8988066825775657,
+      "val_f1": 0.9384500373785198,
+      "checkpoint_saved": false
+    },
+    {
+      "epoch": 11,
+      "train_loss": 0.07403154868435691,
+      "val_accuracy": 0.8482915717539863,
+      "val_precision": 0.9867403314917127,
+      "val_recall": 0.8525059665871122,
+      "val_f1": 0.9147247119078105,
+      "checkpoint_saved": false
+    },
+    {
+      "epoch": 12,
+      "train_loss": 0.05114120137461317,
+      "val_accuracy": 0.8988610478359909,
+      "val_precision": 0.9809964047252183,
+      "val_recall": 0.9116945107398569,
+      "val_f1": 0.9450766947055913,
+      "checkpoint_saved": false
+    },
+    {
+      "epoch": 13,
+      "train_loss": 0.025948825738311376,
+      "val_accuracy": 0.9079726651480637,
+      "val_precision": 0.9807008633824277,
+      "val_recall": 0.9217183770883055,
+      "val_f1": 0.9502952755905512,
+      "checkpoint_saved": false
+    },
+    {
+      "epoch": 14,
+      "train_loss": 0.038247117382754395,
+      "val_accuracy": 0.8733485193621868,
+      "val_precision": 0.985569214323891,
+      "val_recall": 0.8801909307875895,
+      "val_f1": 0.929904185577408,
+      "checkpoint_saved": false
+    }
+  ],
+  "best_val_f1": 0.9515375153751537,
+  "stopped_early": true
+}
