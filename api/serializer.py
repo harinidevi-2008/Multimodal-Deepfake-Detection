@@ -38,8 +38,8 @@ CONTRIBUTION_NOTE = (
     "ground-truth attribution. See fusion/modality_contribution.py."
 )
 MODEL_CONFIDENCE_NOTE = (
-    "Model confidence reflects distance from the 0.5 decision boundary - a final "
-    "fake probability within 0.15 of 0.5 is flagged as low-confidence (see "
+    "Model confidence reflects distance from the calibrated decision boundary - a final "
+    "fake probability within 0.15 of that threshold is flagged as low-confidence (see "
     "evidence/evidence_builder.py's LOW_CONFIDENCE_MARGIN)."
 )
 
@@ -499,6 +499,7 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
         "final_verdict": "LIKELY_DEEPFAKE" if result["prediction"] == "DEEPFAKE" else "LIKELY_REAL",
         "final_fake_probability": result["final_fake_probability"],
         "final_real_probability": result["final_real_probability"],
+        "decision_threshold": result.get("fusion_diagnostics", {}).get("decision_threshold"),
         "low_confidence": evidence_report.get("low_confidence"),
         "evidence_consistency": evidence_report.get("evidence_consistency"),
         "modality_disagreement": evidence_report.get("modality_disagreement"),

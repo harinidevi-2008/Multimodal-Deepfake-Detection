@@ -18,13 +18,17 @@ Usage:
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 import numpy as np
 import torch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+FUSION_DIR = Path(__file__).resolve().parent
+REPO_ROOT = FUSION_DIR.parent
+sys.path.insert(0, str(FUSION_DIR))
+sys.path.insert(0, str(REPO_ROOT / "inference"))
 from enhanced_fusion_model import EnhancedFusionModel  # noqa: E402
 from env_defaults import (  # noqa: E402
     DEFAULT_AUDIO_ROOT,
@@ -35,6 +39,16 @@ from env_defaults import (  # noqa: E402
     DEFAULT_VISUAL_ROOT,
 )
 from feature_normalization import DEFAULT_NORMALIZATION_PATH, apply_normalization, load_normalization  # noqa: E402
+from enhanced_fusion_model import default_reliability  # noqa: E402
+from full_pipeline import DEFAULT_THRESHOLDS_PATH, load_calibrated_threshold  # noqa: E402
+
+
+def architecture_for_checkpoint(weights_path, fallback="attention"):
+    meta_path = Path(str(weights_path) + ".model_meta.json")
+    if not meta_path.exists():
+        return fallback
+    with open(meta_path, "r", encoding="utf-8") as f:
+        return json.load(f).get("fusion_architecture", fallback)
 
 
 def load_features(visual_path, audio_path, semantic_path, blink_path, lipsync_path, normalization=None):
@@ -58,30 +72,49 @@ def load_features(visual_path, audio_path, semantic_path, blink_path, lipsync_pa
 
 
 def load_model(weights_path):
-    model = EnhancedFusionModel()
-    model.load_state_dict(torch.load(weights_path, map_location="cpu"))
+    model = EnhancedFusionModel(fusion_architecture=architecture_for_checkpoint(weights_path))
+    state_dict = torch.load(weights_path, map_location="cpu")
+    try:
+        model.load_state_dict(state_dict, strict=True)
+    except RuntimeError:
+        if Path(weights_path).name != "best_enhanced_fusion_model.pt":
+            raise
+        model.load_state_dict(state_dict, strict=False)
     model.eval()
     return model
 
 
-def predict(visual_path, audio_path, semantic_path, blink_path, lipsync_path, weights_path, normalization=None):
+def predict(
+    visual_path,
+    audio_path,
+    semantic_path,
+    blink_path,
+    lipsync_path,
+    weights_path,
+    normalization=None,
+    thresholds_path=DEFAULT_THRESHOLDS_PATH,
+):
     visual, audio, semantic, blink, lipsync = load_features(
         visual_path, audio_path, semantic_path, blink_path, lipsync_path, normalization=normalization
     )
     model = load_model(weights_path)
 
     with torch.no_grad():
-        logits, attention = model(visual, audio, semantic, blink, lipsync)
+        reliability = default_reliability(semantic)
+        logits, attention = model(visual, audio, semantic, blink, lipsync, reliability=reliability)
         probabilities = torch.softmax(logits, dim=1)
 
         fake_probability = probabilities[0, 1].item()
         real_probability = probabilities[0, 0].item()
-        prediction = torch.argmax(probabilities, dim=1).item()
+        threshold, threshold_source = load_calibrated_threshold(weights_path, thresholds_path)
+        prediction = 1 if fake_probability >= threshold else 0
 
     return {
         "real_probability": real_probability,
         "fake_probability": fake_probability,
         "prediction": prediction,
+        "decision_threshold": threshold,
+        "decision_threshold_source": threshold_source,
         "attention": attention,
     }
 
@@ -100,6 +133,7 @@ def main():
     parser.add_argument("--lipsync-root", default=DEFAULT_LIPSYNC_ROOT)
     parser.add_argument("--weights", default=DEFAULT_ENHANCED_FUSION_WEIGHTS)
     parser.add_argument("--normalization-path", default=str(DEFAULT_NORMALIZATION_PATH))
+    parser.add_argument("--thresholds-path", default=str(DEFAULT_THRESHOLDS_PATH))
     parser.add_argument("--no-normalization", action="store_true",
                          help="Skip blink/lipsync normalization even if a normalization file exists.")
     args = parser.parse_args()
@@ -130,7 +164,16 @@ def main():
     print("Lip-sync :", lipsync_path)
     print("Normalization:", args.normalization_path if normalization is not None else "NONE (raw features)")
 
-    result = predict(visual_path, audio_path, semantic_path, blink_path, lipsync_path, args.weights, normalization)
+    result = predict(
+        visual_path,
+        audio_path,
+        semantic_path,
+        blink_path,
+        lipsync_path,
+        args.weights,
+        normalization,
+        thresholds_path=args.thresholds_path,
+    )
 
     fake_percentage = result["fake_probability"] * 100
     real_percentage = result["real_probability"] * 100
@@ -140,6 +183,7 @@ def main():
     print("----------------------------------------")
     print(f"Real probability : {real_percentage:.2f}%")
     print(f"Fake probability : {fake_percentage:.2f}%")
+    print(f"Decision threshold: {result['decision_threshold']:.4f}")
     print("Prediction       :", "DEEPFAKE" if result["prediction"] == 1 else "REAL")
 
     print("\nAttention matrix (descriptive only - see fusion/attention_utils.py's docstring; "

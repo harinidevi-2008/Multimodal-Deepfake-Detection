@@ -1,0 +1,49 @@
+{
+  "generated_utc": "2026-09-18T17:40:19+00:00",
+  "criterion": "Maximize validation balanced accuracy over unique validation fake-probability scores; break ties by validation F1, then by threshold closest to 0.5. Test labels are never used.",
+  "split_path": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\data_split.json",
+  "thresholds": {
+    "visual": {
+      "threshold": 0.8200402855873108,
+      "validation_balanced_accuracy": 0.8194749403341288,
+      "validation_f1": 0.8601568839599676,
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\classifiers\\best_visual_classifier.pt"
+    },
+    "audio": {
+      "threshold": 0.6406053900718689,
+      "validation_balanced_accuracy": 0.6953221957040573,
+      "validation_f1": 0.9195865893622385,
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\classifiers\\best_audio_classifier.pt"
+    },
+    "semantic": {
+      "threshold": 0.557212769985199,
+      "validation_balanced_accuracy": 0.527326968973747,
+      "validation_f1": 0.955794504181601,
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\classifiers\\best_semantic_classifier.pt"
+    },
+    "fusion_3_stream": {
+      "threshold": 0.9035017490386963,
+      "validation_balanced_accuracy": 0.8155727923627685,
+      "validation_f1": 0.9309127584467978,
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_fusion_model.pt"
+    },
+    "enhanced_base": {
+      "threshold": 0.9559223651885986,
+      "validation_balanced_accuracy": 0.84881861575179,
+      "validation_f1": 0.8909952606635071,
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_enhanced_fusion_model.pt"
+    },
+    "enhanced_attention": {
+      "threshold": 0.9714009761810303,
+      "validation_balanced_accuracy": 0.8435799522673031,
+      "validation_f1": 0.8904686677198526,
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_enhanced_fusion_model_attention.pt"
+    },
+    "enhanced_gated": {
+      "threshold": 0.9830573201179504,
+      "validation_balanced_accuracy": 0.8359427207637231,
+      "validation_f1": 0.8810408921933085,
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_enhanced_fusion_model_gated.pt"
+    }
+  }
+}

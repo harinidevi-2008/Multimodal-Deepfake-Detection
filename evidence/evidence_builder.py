@@ -60,7 +60,9 @@ LEARNED_SIGNAL_THRESHOLD = 0.6
 LEARNED_MODALITIES = ("visual", "audio", "semantic")
 
 
-def _verdict_label(final_prob):
+def _verdict_label(final_prob, decision_threshold=0.5):
+    if final_prob < decision_threshold:
+        return "Likely Authentic"
     if final_prob >= FINAL_PROB_HIGH:
         return "Likely Deepfake"
     if final_prob >= FINAL_PROB_MEDIUM:
@@ -68,8 +70,8 @@ def _verdict_label(final_prob):
     return "Likely Authentic"
 
 
-def _is_low_confidence(final_prob):
-    return abs(final_prob - 0.5) <= LOW_CONFIDENCE_MARGIN
+def _is_low_confidence(final_prob, decision_threshold=0.5):
+    return abs(final_prob - decision_threshold) <= LOW_CONFIDENCE_MARGIN
 
 
 def _signal_strength(value):
@@ -134,8 +136,8 @@ def _build_rule_signals(blink_result, lipsync_result):
     ]
 
 
-def _build_consistency(final_fake_probability, signals):
-    final_support = "fake" if final_fake_probability >= 0.5 else "real"
+def _build_consistency(final_fake_probability, signals, decision_threshold=0.5):
+    final_support = "fake" if final_fake_probability >= decision_threshold else "real"
     strong_opposing = [
         signal for signal in signals
         if signal["supports"] != final_support
@@ -157,7 +159,7 @@ def _build_consistency(final_fake_probability, signals):
         level = "HIGH"
         disagreement = "LOW"
         review_recommended = False
-    if _is_low_confidence(final_fake_probability):
+    if _is_low_confidence(final_fake_probability, decision_threshold):
         review_recommended = True
         if level == "HIGH":
             level = "MIXED"
@@ -180,6 +182,7 @@ def build_evidence_report(
     blink_result,
     lipsync_result,
     final_fake_probability,
+    decision_threshold=0.5,
 ):
     """
     Parameters:
@@ -232,12 +235,12 @@ def build_evidence_report(
         _build_learned_signals(visual_fake_probability, audio_fake_probability, semantic_fake_probability)
         + _build_rule_signals(blink_result, lipsync_result)
     )
-    consistency = _build_consistency(float(final_fake_probability), signals)
+    consistency = _build_consistency(float(final_fake_probability), signals, decision_threshold)
 
-    low_confidence = _is_low_confidence(final_fake_probability)
+    low_confidence = _is_low_confidence(final_fake_probability, decision_threshold)
     if low_confidence:
         reasons.append(
-            f"Final probability is within {LOW_CONFIDENCE_MARGIN:.2f} of the 0.5 decision boundary - "
+            f"Final probability is within {LOW_CONFIDENCE_MARGIN:.2f} of the {decision_threshold:.3f} decision boundary - "
             "genuinely low-confidence result."
         )
 
@@ -250,7 +253,8 @@ def build_evidence_report(
         "lip_sync_mismatch_score": lipsync_result.get("mismatch_score"),
         "lip_sync_status": lipsync_result.get("lipsync_status"),
         "final_fake_probability": round(float(final_fake_probability), 4),
-        "verdict": _verdict_label(final_fake_probability),
+        "decision_threshold": round(float(decision_threshold), 6),
+        "verdict": _verdict_label(final_fake_probability, decision_threshold),
         "low_confidence": low_confidence,
         "evidence": reasons,
         "signals": signals,

@@ -7,7 +7,7 @@
   "final_fake_probability": 0.153,
   "final_real_probability": 0.847,
   "low_confidence": false,
-  "model_confidence_note": "Model confidence reflects distance from the 0.5 decision boundary on the calibrated fusion output, not a calibrated probability of ground truth.",
+  "model_confidence_note": "Model confidence reflects distance from the calibrated decision boundary on the fusion output, not a calibrated probability of ground truth.",
   "modalities": {
     "visual": {
       "label": "Visual",

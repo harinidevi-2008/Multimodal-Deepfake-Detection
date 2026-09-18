@@ -1,14 +1,23 @@
+export function asFiniteNumber(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
 export function toPercent(value, digits = 0) {
-  return `${(value * 100).toFixed(digits)}%`
+  const number = asFiniteNumber(value)
+  return number === null ? 'Unavailable' : `${(number * 100).toFixed(digits)}%`
 }
 
 export function formatSeconds(value) {
-  return `${value.toFixed(1)}s`
+  const number = asFiniteNumber(value)
+  return number === null ? 'Unavailable' : `${number.toFixed(1)}s`
 }
 
 export function formatTimestamp(value) {
-  const mins = Math.floor(value / 60)
-  const secs = (value % 60).toFixed(1).padStart(4, '0')
+  const number = asFiniteNumber(value)
+  if (number === null) return 'Unavailable'
+  const mins = Math.floor(number / 60)
+  const secs = (number % 60).toFixed(1).padStart(4, '0')
   return mins > 0 ? `${mins}:${secs}` : `${secs}s`
 }
 
@@ -22,7 +31,9 @@ export const MODALITY_COLORS = {
 }
 
 export function scoreTone(value) {
-  if (value >= 0.6) return 'danger'
-  if (value >= 0.4) return 'warning'
+  const number = asFiniteNumber(value)
+  if (number === null) return 'accent'
+  if (number >= 0.6) return 'danger'
+  if (number >= 0.4) return 'warning'
   return 'success'
 }

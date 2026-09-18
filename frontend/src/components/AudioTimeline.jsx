@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatSeconds } from '../utils/formatters'
+import { asFiniteNumber, formatSeconds } from '../utils/formatters'
 import { resolveEvidenceUrl } from '../api/client'
 
 const WIDTH = 900
@@ -7,6 +7,7 @@ const HEIGHT = 140
 
 export default function AudioTimeline({ audioWaveform }) {
   const { envelope, duration_seconds, localized_windows = [] } = audioWaveform
+  const duration = asFiniteNumber(duration_seconds) || 0
   const [hoverIndex, setHoverIndex] = useState(null)
   const [selectedWindow, setSelectedWindow] = useState(null)
   const [currentTime, setCurrentTime] = useState(0)
@@ -52,9 +53,10 @@ export default function AudioTimeline({ audioWaveform }) {
       >
         <line x1={0} y1={mid} x2={WIDTH} y2={mid} stroke="var(--border)" strokeWidth={1} />
         {envelope.map((amp, i) => {
-          const h = Math.max(2, amp * (HEIGHT / 2 - 8))
+          const amplitude = asFiniteNumber(amp) || 0
+          const h = Math.max(2, amplitude * (HEIGHT / 2 - 8))
           const isHover = i === hoverIndex
-          const t = (i / envelope.length) * duration_seconds
+          const t = duration ? (i / envelope.length) * duration : 0
           const inSelected = selectedWindow && t >= selectedWindow.start_seconds && t <= selectedWindow.end_seconds
           return (
             <rect
@@ -71,8 +73,10 @@ export default function AudioTimeline({ audioWaveform }) {
           )
         })}
         {hasLocalizedWindows && localized_windows.map((window) => {
-          const x = (window.start_seconds / duration_seconds) * WIDTH
-          const w = ((window.end_seconds - window.start_seconds) / duration_seconds) * WIDTH
+          const start = asFiniteNumber(window.start_seconds) || 0
+          const end = asFiniteNumber(window.end_seconds) || start
+          const x = duration ? (start / duration) * WIDTH : 0
+          const w = duration ? ((end - start) / duration) * WIDTH : 0
           return (
             <rect
               key={`${window.start_seconds}-${window.end_seconds}`}
@@ -92,11 +96,11 @@ export default function AudioTimeline({ audioWaveform }) {
         <span>0:00</span>
         {hoverIndex !== null && (
           <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
-            {formatSeconds((hoverIndex / envelope.length) * duration_seconds)} · amplitude{' '}
-            {envelope[hoverIndex].toFixed(2)}
+            {formatSeconds(duration ? (hoverIndex / envelope.length) * duration : 0)} - amplitude{' '}
+            {(asFiniteNumber(envelope[hoverIndex]) || 0).toFixed(2)}
           </span>
         )}
-        <span>{formatSeconds(currentTime)} / {formatSeconds(duration_seconds)}</span>
+        <span>{formatSeconds(currentTime)} / {formatSeconds(duration)}</span>
       </div>
       {hasLocalizedWindows ? (
         <div className="stack" style={{ gap: 'var(--space-2)' }}>

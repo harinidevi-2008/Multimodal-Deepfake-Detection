@@ -54,15 +54,30 @@ from feature_normalization import (  # noqa: E402
 )
 
 
+def architecture_for_checkpoint(weights, fallback="attention"):
+    meta_path = Path(str(weights) + ".model_meta.json")
+    if not meta_path.exists():
+        return fallback
+    import json
+    with open(meta_path, "r", encoding="utf-8") as f:
+        return json.load(f).get("fusion_architecture", fallback)
+
+
 @torch.no_grad()
 def run_inference(model, loader, device):
     all_labels, all_probs, all_preds = [], [], []
 
-    for visual, audio, semantic, blink, lipsync, labels in loader:
+    for batch in loader:
+        if len(batch) == 7:
+            visual, audio, semantic, blink, lipsync, labels, reliability = batch
+            reliability = reliability.to(device)
+        else:
+            visual, audio, semantic, blink, lipsync, labels = batch
+            reliability = None
         visual, audio, semantic = visual.to(device), audio.to(device), semantic.to(device)
         blink, lipsync = blink.to(device), lipsync.to(device)
 
-        logits, _ = model(visual, audio, semantic, blink, lipsync)
+        logits, _ = model(visual, audio, semantic, blink, lipsync, reliability=reliability)
         probs = torch.softmax(logits, dim=1)[:, 1]
         preds = logits.argmax(dim=1)
 
@@ -75,7 +90,7 @@ def run_inference(model, loader, device):
 
 def evaluate(visual_root, audio_root, semantic_root, blink_root, lipsync_root, weights,
              split="test", split_path=DEFAULT_SPLIT_PATH, batch_size=64,
-             normalization_path=DEFAULT_NORMALIZATION_PATH):
+             normalization_path=DEFAULT_NORMALIZATION_PATH, fusion_architecture="attention"):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     normalization = None
@@ -88,14 +103,15 @@ def evaluate(visual_root, audio_root, semantic_root, blink_root, lipsync_root, w
     dataset = EnhancedFusionDataset(
         visual_root, audio_root, semantic_root, blink_root, lipsync_root,
         split_path=split_path_arg, split_name=split, normalization_stats=normalization,
+        return_reliability=True,
     )
     if len(dataset) == 0:
         return None
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-    model = EnhancedFusionModel().to(device)
-    model.load_state_dict(torch.load(weights, map_location=device))
+    model = EnhancedFusionModel(fusion_architecture=fusion_architecture).to(device)
+    model.load_state_dict(torch.load(weights, map_location=device), strict=False)
     model.eval()
 
     normalization_warning = check_normalization_consistency(weights, normalization_used)
@@ -143,6 +159,12 @@ def main():
     parser.add_argument("--normalization-path", default=str(DEFAULT_NORMALIZATION_PATH))
     parser.add_argument("--no-normalization", action="store_true",
                          help="Evaluate on raw (unnormalized) blink/lipsync features.")
+    parser.add_argument(
+        "--fusion-architecture",
+        choices=["auto", "attention", "gated"],
+        default="auto",
+        help="Architecture to instantiate; 'auto' reads <weights>.model_meta.json when available.",
+    )
     args = parser.parse_args()
 
     if args.split == "all":
@@ -155,6 +177,10 @@ def main():
         args.visual_root, args.audio_root, args.semantic_root, args.blink_root, args.lipsync_root,
         args.weights, split=args.split, split_path=args.split_path, batch_size=args.batch_size,
         normalization_path=normalization_path,
+        fusion_architecture=(
+            architecture_for_checkpoint(args.weights)
+            if args.fusion_architecture == "auto" else args.fusion_architecture
+        ),
     )
 
     if metrics is None:

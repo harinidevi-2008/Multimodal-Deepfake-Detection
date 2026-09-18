@@ -1,11 +1,16 @@
 import Badge from './ui/Badge'
 import InfoTip from './ui/InfoTip'
-import { toPercent } from '../utils/formatters'
+import { formatSeconds, toPercent } from '../utils/formatters'
 
 export default function OverallResultPanel({ result }) {
   const isFake = result.final_verdict === 'LIKELY_DEEPFAKE'
   const fakePct = result.final_fake_probability
   const realPct = result.final_real_probability
+  const decisionThreshold = result.decision_threshold ?? result.fusion_diagnostics?.decision_threshold
+  const decisionThresholdLabel = toPercent(decisionThreshold, 1)
+  const decisionThresholdTip = decisionThresholdLabel === 'Unavailable'
+    ? 'The calibrated decision boundary was not returned for this result; confidence is still not a guarantee of ground truth.'
+    : `Distance from the calibrated ${decisionThresholdLabel} decision boundary indicates how decisively the fusion model landed on this side of the line; it is not a guarantee of ground truth.`
   const showReview = result.review_recommended || result.evidence_consistency === 'LOW'
 
   return (
@@ -42,8 +47,8 @@ export default function OverallResultPanel({ result }) {
             )}
           </div>
           <p style={{ color: 'var(--text-secondary)', fontSize: 13.5, maxWidth: 420 }}>
-            {result.video_filename} · {result.video_duration_seconds.toFixed(1)}s analyzed in{' '}
-            {result.processing_time_seconds.toFixed(1)}s
+            {result.video_filename || 'Uploaded video'} - {formatSeconds(result.video_duration_seconds)} analyzed in{' '}
+            {formatSeconds(result.processing_time_seconds)}
           </p>
           {(result.evidence_consistency || result.modality_disagreement) && (
             <div className="callout" style={{ fontSize: 12.5 }}>
@@ -63,7 +68,7 @@ export default function OverallResultPanel({ result }) {
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               {result.model_confidence_note}
             </span>
-            <InfoTip text="Distance from the 0.5 decision boundary indicates how decisively the fusion model landed on this side of the line — it is not a guarantee of ground truth." />
+            <InfoTip text={decisionThresholdTip} />
           </div>
         </div>
       </div>
@@ -73,6 +78,7 @@ export default function OverallResultPanel({ result }) {
 
 function ProbabilityBar({ label, value, tone }) {
   const colorVar = tone === 'danger' ? 'var(--danger)' : 'var(--success)'
+  const width = toPercent(value, 0)
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
@@ -82,7 +88,7 @@ function ProbabilityBar({ label, value, tone }) {
         </span>
       </div>
       <div className="meter" style={{ height: 10 }}>
-        <div className="meter__fill" style={{ width: toPercent(value, 0), background: colorVar }} />
+        <div className="meter__fill" style={{ width: width === 'Unavailable' ? '0%' : width, background: colorVar }} />
       </div>
     </div>
   )

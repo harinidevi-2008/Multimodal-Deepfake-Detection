@@ -51,7 +51,7 @@ export default function ContextualAnalysis({ contextualAnalysis }) {
             {semantic.transcript && <div style={{ marginTop: 6 }}>Transcript: {semantic.transcript}</div>}
             {semantic.segments?.length > 0 && (
               <div style={{ marginTop: 6 }}>
-                Segments: {semantic.segments.map((segment) => `${segment.start.toFixed(1)}-${segment.end.toFixed(1)}s`).join(', ')}
+                Segments: {semantic.segments.map((segment) => `${Number.isFinite(Number(segment.start)) ? Number(segment.start).toFixed(1) : 'unknown'}-${Number.isFinite(Number(segment.end)) ? Number(segment.end).toFixed(1) : 'unknown'}s`).join(', ')}
               </div>
             )}
           </div>
@@ -79,7 +79,7 @@ function ModalityExplanations({ items }) {
         {items.map((item) => (
           <div key={item.modality} className="callout">
             <div style={{ fontWeight: 700, marginBottom: 4 }}>
-              {item.label} — {item.supports === 'FAKE' ? 'supports FAKE' : 'supports REAL'} ({item.strength})
+              {item.label} - {item.supports === 'FAKE' ? 'supports FAKE' : 'supports REAL'} ({item.strength})
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
               <div><strong>What it analyzes:</strong> {item.what_it_analyzes}</div>

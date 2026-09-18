@@ -73,7 +73,7 @@ export default function FrameViewer({ frames }) {
         <span><strong>Timestamp:</strong> {formatSeconds(frame.timestamp_seconds)}</span>
         <span><strong>Reason:</strong> {REASON_LABEL[frame.frame_selection_reason] || frame.frame_selection_reason || 'Supporting visual sample'}</span>
         <span><strong>Evidence:</strong> {EVIDENCE_TYPE_LABEL[frame.evidence_type] || frame.evidence_type || 'Supporting visual sample'}</span>
-        {frame.confidence != null && <span><strong>Confidence:</strong> {Number(frame.confidence).toFixed(2)}</span>}
+        {Number.isFinite(Number(frame.confidence)) && <span><strong>Confidence:</strong> {Number(frame.confidence).toFixed(2)}</span>}
         {frame.strength && <span><strong>Strength:</strong> {frame.strength}</span>}
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>

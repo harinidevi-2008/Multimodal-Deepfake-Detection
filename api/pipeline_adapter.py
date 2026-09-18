@@ -39,6 +39,7 @@ from pathlib import Path
 import numpy as np
 
 from api.errors import (
+    AnalysisAPIError,
     CorruptVideoError,
     FeatureExtractionFailedError,
     InferenceFailedError,
@@ -57,6 +58,17 @@ AUDIO_RUNNER = Path(__file__).resolve().parent / "runners" / "run_audio_extract.
 
 AUDIO_EXTRACT_TIMEOUT_SECONDS = 300
 ANALYSIS_TIMEOUT_SECONDS = int(os.environ.get("DFD_ANALYSIS_TIMEOUT_SECONDS", "900"))
+
+API_ERROR_BY_CODE = {
+    cls.error_code: cls
+    for cls in (
+        CorruptVideoError,
+        FeatureExtractionFailedError,
+        InferenceFailedError,
+        AnalysisTimeoutError,
+        MissingCheckpointAPIError,
+    )
+}
 
 # ---------------------------------------------------------------------
 # sys.path bootstrap (main process only - audio/src is deliberately
@@ -80,6 +92,7 @@ from full_pipeline import (  # noqa: E402
     MissingCheckpointError,
     MissingFeatureFileError,
     FeatureShapeError,
+    DEFAULT_THRESHOLDS_PATH,
 )
 from env_defaults import (  # noqa: E402
     DEFAULT_AUDIO_CLASSIFIER_WEIGHTS,
@@ -410,6 +423,7 @@ def _run_raw_video_analysis(video_path: Path, job: Job) -> dict:
             normalization_path=(
                 str(DEFAULT_NORMALIZATION_PATH) if Path(DEFAULT_NORMALIZATION_PATH).exists() else None
             ),
+            thresholds_path=str(DEFAULT_THRESHOLDS_PATH),
             video_path=str(video_path),
             frame_output_dir=str(job.evidence_dir),
             blink_events=blink_events,
@@ -480,6 +494,8 @@ def _analysis_worker(video_path, job_id, result_queue):
         result_queue.put(("missing_checkpoint", str(exc)))
     except (MissingFeatureFileError, FeatureShapeError) as exc:
         result_queue.put(("feature_error", str(exc)))
+    except AnalysisAPIError as exc:
+        result_queue.put(("api_error", exc.to_body()))
     except Exception as exc:  # noqa: BLE001
         result_queue.put(("error", repr(exc)))
 
@@ -566,6 +582,9 @@ def run_raw_video_analysis(video_path: Path, job: Job) -> dict:
             "Inference failed due to an internal feature-preparation error.",
             details="See the backend server logs for the full error.",
         )
+    if status == "api_error":
+        error_class = API_ERROR_BY_CODE.get(payload.get("error"), InferenceFailedError)
+        raise error_class(payload.get("message", "Inference failed on the backend."), details=payload.get("details"))
     raise InferenceFailedError(
         "Inference failed on the backend.",
         details="See the backend server logs for the full error.",

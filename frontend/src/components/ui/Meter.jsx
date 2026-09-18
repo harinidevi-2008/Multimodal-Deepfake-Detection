@@ -13,13 +13,15 @@ const TONE_VARS = {
  */
 export default function Meter({ label, value, color = 'accent', digits = 0 }) {
   const fillColor = TONE_VARS[color] || color
+  const percent = toPercent(value, 0)
+  const isUnavailable = percent === 'Unavailable'
   return (
     <div className="meter-row">
       {label && <span className="meter-row__label">{label}</span>}
       <div className="meter" style={{ flex: 1 }}>
         <div
           className="meter__fill"
-          style={{ width: toPercent(value, 0), background: fillColor }}
+          style={{ width: isUnavailable ? '0%' : percent, background: fillColor }}
         />
       </div>
       <span className="meter-row__value">{toPercent(value, digits)}</span>

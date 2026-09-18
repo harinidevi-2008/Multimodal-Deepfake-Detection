@@ -1,0 +1,20 @@
+{
+  "model_class": "EnhancedFusionModel",
+  "fusion_architecture": "attention",
+  "modality_order": [
+    "visual",
+    "audio",
+    "semantic",
+    "blink",
+    "lipsync"
+  ],
+  "uses_reliability_gates": false,
+  "reliability_order": [
+    "visual",
+    "audio",
+    "semantic",
+    "blink",
+    "lipsync"
+  ],
+  "semantic_invalid_when_all_zero": true
+}

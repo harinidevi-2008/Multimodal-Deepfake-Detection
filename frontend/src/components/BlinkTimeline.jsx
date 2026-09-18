@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatSeconds } from '../utils/formatters'
+import { asFiniteNumber, formatSeconds } from '../utils/formatters'
 
 const WIDTH = 900
 const HEIGHT = 150
@@ -7,14 +7,14 @@ const PAD = 20
 
 export default function BlinkTimeline({ blinkTimeline }) {
   const [hoverIndex, setHoverIndex] = useState(null)
-  const maxEar = Math.max(...blinkTimeline.map((p) => p.ear_value), 0.4)
+  const maxEar = Math.max(...blinkTimeline.map((p) => asFiniteNumber(p.ear_value) || 0), 0.4)
   const duration = blinkTimeline[blinkTimeline.length - 1].timestamp_seconds
 
-  const x = (i) => (i / (blinkTimeline.length - 1)) * (WIDTH - PAD * 2) + PAD
+  const x = (i) => ((blinkTimeline.length > 1 ? i / (blinkTimeline.length - 1) : 0) * (WIDTH - PAD * 2)) + PAD
   const y = (v) => HEIGHT - PAD - (v / maxEar) * (HEIGHT - PAD * 2)
 
   const linePath = blinkTimeline
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(p.ear_value).toFixed(1)}`)
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(asFiniteNumber(p.ear_value) || 0).toFixed(1)}`)
     .join(' ')
 
   const blinkEvents = blinkTimeline.filter((p) => p.is_blink)
@@ -47,7 +47,7 @@ export default function BlinkTimeline({ blinkTimeline }) {
 
         {blinkTimeline.map((p, i) =>
           p.is_blink ? (
-            <circle key={i} cx={x(i)} cy={y(p.ear_value)} r={3.5} fill="var(--warning-strong)" />
+            <circle key={i} cx={x(i)} cy={y(asFiniteNumber(p.ear_value) || 0)} r={3.5} fill="var(--warning-strong)" />
           ) : null
         )}
 
@@ -68,8 +68,8 @@ export default function BlinkTimeline({ blinkTimeline }) {
         <span>0:00</span>
         {hovered && (
           <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
-            {formatSeconds(hovered.timestamp_seconds)} · EAR {hovered.ear_value.toFixed(2)}
-            {hovered.is_blink ? ' · blink' : ''}
+            {formatSeconds(hovered.timestamp_seconds)} - EAR {(asFiniteNumber(hovered.ear_value) || 0).toFixed(2)}
+            {hovered.is_blink ? ' - blink' : ''}
           </span>
         )}
         <span>{formatSeconds(duration)}</span>

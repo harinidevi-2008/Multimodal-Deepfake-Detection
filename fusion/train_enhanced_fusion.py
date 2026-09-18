@@ -73,6 +73,12 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--output", default="fusion/best_enhanced_fusion_model.pt")
     parser.add_argument("--history-output", default="fusion/training_history.json")
+    parser.add_argument(
+        "--fusion-architecture",
+        choices=["attention", "gated"],
+        default="attention",
+        help="Keep 'attention' as the backward-compatible default; use 'gated' for the gated baseline.",
+    )
     args = parser.parse_args()
 
     OFFICIAL_PROTOCOL_WARNING = (
@@ -97,11 +103,13 @@ def main():
         visual_root=args.visual_root, audio_root=args.audio_root, semantic_root=args.semantic_root,
         blink_root=args.blink_root, lipsync_root=args.lipsync_root,
         split_path=args.split_path, split_name="train", normalization_stats=normalization,
+        return_reliability=True,
     )
     val_dataset = EnhancedFusionDataset(
         visual_root=args.visual_root, audio_root=args.audio_root, semantic_root=args.semantic_root,
         blink_root=args.blink_root, lipsync_root=args.lipsync_root,
         split_path=args.split_path, split_name="validation", normalization_stats=normalization,
+        return_reliability=True,
     )
     print(f"\nTraining samples:   {len(train_dataset)}")
     print(f"Validation samples: {len(val_dataset)}")
@@ -117,7 +125,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    model = EnhancedFusionModel().to(device)
+    model = EnhancedFusionModel(fusion_architecture=args.fusion_architecture).to(device)
 
     train_labels = [sample[5] for sample in train_dataset.samples]
     real_count = train_labels.count(0)
@@ -167,6 +175,7 @@ def main():
                     "split_path": args.split_path,
                     "train_samples": len(train_dataset),
                     "validation_samples": len(val_dataset),
+                    "fusion_architecture": args.fusion_architecture,
                 },
                 "history": history,
                 "best_val_f1": best_f1,
@@ -178,13 +187,15 @@ def main():
         running_loss = 0.0
         print(f"\n========== Epoch {epoch + 1}/{args.epochs} ==========")
 
-        for batch_idx, (visual, audio, semantic, blink, lipsync, labels_batch) in enumerate(train_loader):
+        for batch_idx, batch in enumerate(train_loader):
+            visual, audio, semantic, blink, lipsync, labels_batch, reliability = batch
             visual, audio, semantic = visual.to(device), audio.to(device), semantic.to(device)
             blink, lipsync = blink.to(device), lipsync.to(device)
+            reliability = reliability.to(device)
             labels_batch = labels_batch.to(device)
 
             optimizer.zero_grad()
-            logits, _ = model(visual, audio, semantic, blink, lipsync)
+            logits, _ = model(visual, audio, semantic, blink, lipsync, reliability=reliability)
             loss = criterion(logits, labels_batch)
             loss.backward()
             optimizer.step()
@@ -199,11 +210,12 @@ def main():
         all_predictions, all_labels = [], []
 
         with torch.no_grad():
-            for visual, audio, semantic, blink, lipsync, labels_batch in val_loader:
+            for visual, audio, semantic, blink, lipsync, labels_batch, reliability in val_loader:
                 visual, audio, semantic = visual.to(device), audio.to(device), semantic.to(device)
                 blink, lipsync = blink.to(device), lipsync.to(device)
+                reliability = reliability.to(device)
 
-                logits, _ = model(visual, audio, semantic, blink, lipsync)
+                logits, _ = model(visual, audio, semantic, blink, lipsync, reliability=reliability)
                 predictions = torch.argmax(logits, dim=1)
 
                 all_predictions.extend(predictions.cpu().numpy())
@@ -236,6 +248,17 @@ def main():
             )
             print(f"\nSaved best enhanced fusion model to {args.output} (val F1={val_f1:.4f})")
             print(f"Saved normalization metadata to {meta_path}")
+            model_meta_path = Path(str(args.output) + ".model_meta.json")
+            with open(model_meta_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "model_class": "EnhancedFusionModel",
+                    "fusion_architecture": args.fusion_architecture,
+                    "modality_order": model.modality_order,
+                    "uses_reliability_gates": bool(model.use_reliability_gates),
+                    "reliability_order": model.modality_order,
+                    "semantic_invalid_when_all_zero": True,
+                }, f, indent=2)
+            print(f"Saved model metadata to {model_meta_path}")
         else:
             epochs_without_improvement += 1
             print(f"\nNo val F1 improvement for {epochs_without_improvement}/{args.patience} epoch(s)")

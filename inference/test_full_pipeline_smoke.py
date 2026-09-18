@@ -61,6 +61,7 @@ REQUIRED_KEYS = [
     "window_evidence",
     "normalization_applied",
     "evidence_availability",
+    "fusion_diagnostics",
 ]
 
 
@@ -164,14 +165,18 @@ def main():
         if abs(prob_sum - 1.0) > 1e-3:
             print(f"[FAIL] final_fake_probability + final_real_probability = {prob_sum!r}, expected ~1.0.")
             sys.exit(1)
-        print(f"[PASS] final_fake_probability + final_real_probability ≈ 1 ({prob_sum:.6f}).")
+        print(f"[PASS] final_fake_probability + final_real_probability ~= 1 ({prob_sum:.6f}).")
 
-        expected_prediction = "DEEPFAKE" if result["final_fake_probability"] >= 0.5 else "REAL"
+        decision_threshold = result.get("fusion_diagnostics", {}).get("decision_threshold")
+        if not isinstance(decision_threshold, (float, int)):
+            print(f"[FAIL] fusion_diagnostics.decision_threshold is missing or invalid: {decision_threshold!r}.")
+            sys.exit(1)
+        expected_prediction = "DEEPFAKE" if result["final_fake_probability"] >= decision_threshold else "REAL"
         if result["prediction"] != expected_prediction:
-            print(f"[FAIL] prediction={result['prediction']!r} does not match the 0.5 threshold on "
+            print(f"[FAIL] prediction={result['prediction']!r} does not match the returned threshold "
                   f"final_fake_probability={result['final_fake_probability']!r} (expected {expected_prediction!r}).")
             sys.exit(1)
-        print("[PASS] prediction agrees with the 0.5 threshold on final_fake_probability.")
+        print(f"[PASS] prediction agrees with the returned threshold ({decision_threshold:.6f}).")
 
         attention_summary = result["attention_summary"]
         contribution = result["modality_contributions"]

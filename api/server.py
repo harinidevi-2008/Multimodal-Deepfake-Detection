@@ -19,6 +19,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from api.errors import (
     FileTooLargeError,
@@ -101,7 +102,7 @@ async def analyze(video: UploadFile = File(None)):
             raise MissingVideoError("The uploaded video file was empty.")
 
         start = time.monotonic()
-        result, meta = run_raw_video_analysis(upload_path, job)
+        result, meta = await run_in_threadpool(run_raw_video_analysis, upload_path, job)
         processing_time_seconds = time.monotonic() - start
 
         analyzed_at = datetime.datetime.now(datetime.timezone.utc).isoformat()

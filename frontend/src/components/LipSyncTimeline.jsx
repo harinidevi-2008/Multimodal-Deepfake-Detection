@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatSeconds } from '../utils/formatters'
+import { asFiniteNumber, formatSeconds } from '../utils/formatters'
 
 const WIDTH = 900
 const HEIGHT = 150
@@ -35,7 +35,8 @@ export default function LipSyncTimeline({ windows }) {
           strokeDasharray="4 4"
         />
         {windows.map((w, i) => {
-          const h = w.mismatch_score * plotHeight
+          const score = asFiniteNumber(w.mismatch_score) || 0
+          const h = score * plotHeight
           const isHover = i === hoverIndex
           return (
             <rect
@@ -45,7 +46,7 @@ export default function LipSyncTimeline({ windows }) {
               width={Math.max(1, barWidth - 2)}
               height={h}
               rx={2}
-              fill={colorFor(w.mismatch_score)}
+              fill={colorFor(score)}
               opacity={isHover ? 1 : 0.85}
               onMouseEnter={() => setHoverIndex(i)}
             />
@@ -56,8 +57,8 @@ export default function LipSyncTimeline({ windows }) {
         <span>{formatSeconds(windows[0].window_start_seconds)}</span>
         {hovered && (
           <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
-            {formatSeconds(hovered.window_start_seconds)}–{formatSeconds(hovered.window_end_seconds)} ·
-            mismatch {hovered.mismatch_score.toFixed(2)}
+            {formatSeconds(hovered.window_start_seconds)}-{formatSeconds(hovered.window_end_seconds)} -
+            mismatch {(asFiniteNumber(hovered.mismatch_score) || 0).toFixed(2)}
           </span>
         )}
         <span>{formatSeconds(windows[windows.length - 1].window_end_seconds)}</span>

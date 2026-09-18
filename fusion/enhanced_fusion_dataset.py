@@ -24,9 +24,11 @@ from torch.utils.data import Dataset
 try:
     from .split_utils import load_split, split_of, to_key
     from .feature_normalization import apply_normalization
+    from .enhanced_fusion_model import MODALITY_ORDER
 except ImportError:
     from split_utils import load_split, split_of, to_key
     from feature_normalization import apply_normalization
+    from enhanced_fusion_model import MODALITY_ORDER
 
 
 class EnhancedFusionDataset(Dataset):
@@ -42,6 +44,7 @@ class EnhancedFusionDataset(Dataset):
         split_name="all",
         normalization_stats=None,
         cache_features=True,
+        return_reliability=False,
     ):
         self.visual_root = Path(visual_root)
         self.audio_root = Path(audio_root)
@@ -51,6 +54,7 @@ class EnhancedFusionDataset(Dataset):
         self.split_name = split_name
         self.normalization_stats = normalization_stats
         self.cache_features = cache_features
+        self.return_reliability = return_reliability
 
         split_data = load_split(split_path) if split_path is not None else None
 
@@ -176,7 +180,7 @@ class EnhancedFusionDataset(Dataset):
             blink = apply_normalization(blink, self.normalization_stats["blink"])
             lipsync = apply_normalization(lipsync, self.normalization_stats["lipsync"])
 
-        return (
+        result = (
             torch.from_numpy(visual),
             torch.from_numpy(audio),
             torch.from_numpy(semantic),
@@ -184,3 +188,22 @@ class EnhancedFusionDataset(Dataset):
             torch.from_numpy(lipsync),
             torch.tensor(label, dtype=torch.long),
         )
+        if not self.return_reliability:
+            return result
+
+        # Reliability order is EnhancedFusionModel.MODALITY_ORDER. Semantic
+        # has a real degraded sentinel from the extractor: an all-zero
+        # embedding. Other modalities stay at 1.0 because the current feature
+        # generators do not expose an equivalent missingness signal here.
+        semantic_valid = 0.0 if np.max(np.abs(semantic)) <= 1e-8 else 1.0
+        reliability_by_name = {
+            "visual": 1.0,
+            "audio": 1.0,
+            "semantic": semantic_valid,
+            "blink": 1.0,
+            "lipsync": 1.0,
+        }
+        reliability = torch.tensor(
+            [reliability_by_name[name] for name in MODALITY_ORDER], dtype=torch.float32
+        )
+        return (*result, reliability)

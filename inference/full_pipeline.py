@@ -65,6 +65,7 @@ the pipeline. This module never silently substitutes random weights
 or falls back to the old 3-modal checkpoint for a missing 5-modal one.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -79,6 +80,7 @@ import torch
 
 from single_stream_classifier import SingleStreamClassifier  # noqa: E402
 from enhanced_fusion_model import EnhancedFusionModel  # noqa: E402
+from enhanced_fusion_model import default_reliability  # noqa: E402
 from feature_normalization import (  # noqa: E402
     DEFAULT_NORMALIZATION_PATH,
     apply_normalization,
@@ -111,6 +113,9 @@ WINDOW_EVIDENCE_UNAVAILABLE_NOTE = (
     "cannot be recovered from the precomputed 2-d lipsync feature vector alone."
 )
 
+DEFAULT_THRESHOLDS_PATH = REPO_ROOT / "eval" / "results" / "thresholds.json"
+DEFAULT_DECISION_THRESHOLD = 0.5
+
 
 class MissingCheckpointError(FileNotFoundError):
     """Raised by require_file() for a missing trained-model checkpoint -
@@ -133,6 +138,59 @@ def require_file(path, description):
             "training script (see the README's training protocol) on real data, not by this module."
         )
     return p
+
+
+def architecture_for_checkpoint(weights_path, fallback="attention"):
+    """Legacy checkpoints have no sidecar metadata and are attention models."""
+    meta_path = Path(str(weights_path) + ".model_meta.json")
+    if not meta_path.exists():
+        return fallback
+    import json
+    with open(meta_path, "r", encoding="utf-8") as f:
+        return json.load(f).get("fusion_architecture", fallback)
+
+
+def threshold_key_for_checkpoint(weights_path):
+    path = Path(weights_path).resolve()
+    name = path.name
+    if name == "best_enhanced_fusion_model_attention.pt":
+        return "enhanced_attention"
+    if name == "best_enhanced_fusion_model_gated.pt":
+        return "enhanced_gated"
+    if name == "best_enhanced_fusion_model.pt":
+        return "enhanced_base"
+    return None
+
+
+def load_calibrated_threshold(weights_path, thresholds_path=DEFAULT_THRESHOLDS_PATH):
+    """
+    Load the validation-calibrated decision threshold for the exact
+    enhanced-fusion checkpoint being used. Falls back to 0.5 only when
+    the threshold artifact or matching checkpoint entry is unavailable.
+    """
+    threshold_source = {
+        "path": str(thresholds_path),
+        "key": None,
+        "criterion": None,
+        "status": "default_0.5",
+    }
+    thresholds_path = Path(thresholds_path)
+    key = threshold_key_for_checkpoint(weights_path)
+    threshold_source["key"] = key
+    if key is None or not thresholds_path.exists():
+        return DEFAULT_DECISION_THRESHOLD, threshold_source
+    with thresholds_path.open("r", encoding="utf-8") as f:
+        doc = json.load(f)
+    entry = doc.get("thresholds", {}).get(key)
+    if entry is None:
+        return DEFAULT_DECISION_THRESHOLD, threshold_source
+    threshold_source.update({
+        "criterion": doc.get("criterion"),
+        "status": "loaded",
+        "validation_balanced_accuracy": entry.get("validation_balanced_accuracy"),
+        "validation_f1": entry.get("validation_f1"),
+    })
+    return float(entry["threshold"]), threshold_source
 
 
 def _blink_status(irregularity_score, threshold=BLINK_ANOMALY_THRESHOLD):
@@ -250,6 +308,7 @@ def run_full_inference(
     semantic_classifier_weights=DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS,
     enhanced_fusion_weights=DEFAULT_ENHANCED_FUSION_WEIGHTS,
     normalization_path=DEFAULT_NORMALIZATION_PATH,
+    thresholds_path=DEFAULT_THRESHOLDS_PATH,
     video_path=None,
     frame_output_dir=None,
     blink_events=None,
@@ -351,19 +410,39 @@ def run_full_inference(
         torch.from_numpy(x).unsqueeze(0)
         for x in (visual_feat, audio_feat, semantic_feat, blink_feat, lipsync_feat)
     ]
+    reliability = default_reliability(tensors[2])
 
-    fusion_model = EnhancedFusionModel()
-    fusion_model.load_state_dict(torch.load(enhanced_fusion_weights, map_location="cpu"))
+    fusion_model = EnhancedFusionModel(
+        fusion_architecture=architecture_for_checkpoint(enhanced_fusion_weights)
+    )
+    state_dict = torch.load(enhanced_fusion_weights, map_location="cpu")
+    try:
+        load_result = fusion_model.load_state_dict(state_dict, strict=True)
+        checkpoint_load_mode = "strict"
+    except RuntimeError:
+        if Path(enhanced_fusion_weights).name != "best_enhanced_fusion_model.pt":
+            raise
+        load_result = fusion_model.load_state_dict(state_dict, strict=False)
+        checkpoint_load_mode = "legacy_strict_false"
     fusion_model.eval()
 
     with torch.inference_mode():
-        logits, attention = fusion_model(*tensors)
+        logits, attention, gate_diagnostics = fusion_model(
+            *tensors, reliability=reliability, return_diagnostics=True
+        )
         probs = torch.softmax(logits, dim=1)
         final_fake_probability = probs[0, 1].item()
         final_real_probability = probs[0, 0].item()
-    prediction = "DEEPFAKE" if final_fake_probability >= 0.5 else "REAL"
+    decision_threshold, threshold_source = load_calibrated_threshold(enhanced_fusion_weights, thresholds_path)
+    prediction = "DEEPFAKE" if final_fake_probability >= decision_threshold else "REAL"
 
-    attention_summary = summarize_attention(attention, MODALITY_ORDER_5)
+    if attention is None:
+        attention_summary = {
+            name: round(float(value), 4)
+            for name, value in zip(MODALITY_ORDER_5, gate_diagnostics["gate_values"][0].cpu().tolist())
+        }
+    else:
+        attention_summary = summarize_attention(attention, MODALITY_ORDER_5)
     contribution = modality_contributions(fusion_model, tensors, MODALITY_ORDER_5)
 
     evidence = build_evidence_report(
@@ -373,6 +452,7 @@ def run_full_inference(
         blink_result={"blink_irregularity_score": blink_irregularity_score, "blink_status": blink_status},
         lipsync_result={"mismatch_score": lip_sync_mismatch_score, "lipsync_status": lip_sync_status},
         final_fake_probability=final_fake_probability,
+        decision_threshold=decision_threshold,
     )
 
     # Blink-event frames: if a raw video was supplied and the caller
@@ -440,9 +520,24 @@ def run_full_inference(
                 "fake": round(final_fake_probability, 6),
             },
             "class_indices": {"real": 0, "fake": 1},
+            "decision_threshold": round(float(decision_threshold), 6),
+            "decision_threshold_source": threshold_source,
             "predicted_class_index": 1 if prediction == "DEEPFAKE" else 0,
             "predicted_class": prediction,
             "modality_order": list(MODALITY_ORDER_5),
+            "fusion_architecture": gate_diagnostics["fusion_architecture"],
+            "checkpoint_path": str(Path(enhanced_fusion_weights).resolve()),
+            "checkpoint_load_mode": checkpoint_load_mode,
+            "checkpoint_missing_keys": list(load_result.missing_keys),
+            "checkpoint_unexpected_keys": list(load_result.unexpected_keys),
+            "modality_reliability": {
+                name: round(float(value), 6)
+                for name, value in zip(MODALITY_ORDER_5, gate_diagnostics["reliability"][0].cpu().tolist())
+            },
+            "modality_gates": {
+                name: round(float(value), 6)
+                for name, value in zip(MODALITY_ORDER_5, gate_diagnostics["gate_values"][0].cpu().tolist())
+            },
         },
         "evidence": evidence,
         "frame_evidence": frame_evidence,
@@ -471,6 +566,7 @@ def main():
     parser.add_argument("--semantic-classifier-weights", default=DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS)
     parser.add_argument("--enhanced-fusion-weights", default=DEFAULT_ENHANCED_FUSION_WEIGHTS)
     parser.add_argument("--normalization-path", default=str(DEFAULT_NORMALIZATION_PATH))
+    parser.add_argument("--thresholds-path", default=str(DEFAULT_THRESHOLDS_PATH))
     parser.add_argument("--no-normalization", action="store_true")
     args = parser.parse_args()
 
@@ -483,6 +579,7 @@ def main():
         semantic_classifier_weights=args.semantic_classifier_weights,
         enhanced_fusion_weights=args.enhanced_fusion_weights,
         normalization_path=(None if args.no_normalization else args.normalization_path),
+        thresholds_path=args.thresholds_path,
     )
     printable = {k: v for k, v in result.items() if k != "attention"}
     print(json.dumps(printable, indent=2, default=str))

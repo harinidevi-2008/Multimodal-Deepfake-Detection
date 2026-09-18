@@ -45,10 +45,11 @@ def _label_from_relative_path(relative_path):
     return None
 
 
-def audit_root(name, root, expected_dim):
+def audit_root(name, root, expected_dim, progress_every=0):
     root = Path(root)
     files = sorted(root.rglob("*.npy"))
     expected_shape = (expected_dim,)
+    total_files = len(files)
 
     count = 0
     shape_counts = {}
@@ -59,8 +60,12 @@ def audit_root(name, root, expected_dim):
     zero_vector_by_label = {0: 0, 1: 0, None: 0}
     label_counts = {0: 0, 1: 0, None: 0}
     unreadable = []
+    relative_paths = set()
 
-    for f in files:
+    if progress_every:
+        print(f"  discovered {total_files:,} .npy files", flush=True)
+
+    for i, f in enumerate(files, start=1):
         try:
             arr = np.load(f)
         except Exception as exc:  # noqa: BLE001 - report and keep auditing the rest
@@ -70,8 +75,10 @@ def audit_root(name, root, expected_dim):
         count += 1
         shape_counts[arr.shape] = shape_counts.get(arr.shape, 0) + 1
         dtype_counts[str(arr.dtype)] = dtype_counts.get(str(arr.dtype), 0) + 1
-        nan_count += int(np.isnan(arr).sum())
-        inf_count += int(np.isinf(arr).sum())
+        finite_mask = np.isfinite(arr)
+        if not bool(finite_mask.all()):
+            nan_count += int(np.isnan(arr).sum())
+            inf_count += int(np.isinf(arr).sum())
         # Direct tuple comparison, not a string comparison - (1, 1280)
         # must be caught as different from (1280,) regardless of how
         # either shape happens to be formatted for display below. This
@@ -80,11 +87,15 @@ def audit_root(name, root, expected_dim):
             unexpected_shape_count += 1
 
         relative_path = f.relative_to(root)
+        relative_paths.add(str(relative_path))
         label = _label_from_relative_path(relative_path)
         label_counts[label] = label_counts.get(label, 0) + 1
 
         if bool(np.all(arr == 0)):
             zero_vector_by_label[label] = zero_vector_by_label.get(label, 0) + 1
+
+        if progress_every and (i % progress_every == 0 or i == total_files):
+            print(f"  checked {i:,}/{total_files:,}", flush=True)
 
     return {
         "name": name,
@@ -106,6 +117,7 @@ def audit_root(name, root, expected_dim):
             "real": label_counts.get(0, 0), "fake": label_counts.get(1, 0), "unknown": label_counts.get(None, 0),
         },
         "unreadable": unreadable,
+        "_relative_paths": relative_paths,
     }
 
 
@@ -114,7 +126,7 @@ def collect_relative_paths(root):
     return {str(f.relative_to(root)) for f in root.rglob("*.npy")}
 
 
-def check_alignment(roots, max_report=20):
+def check_alignment(roots, max_report=20, per_root_paths=None):
     """
     Read-only cross-root check: verifies that the SAME relative paths
     exist across all five feature roots. Each audit_root() call above
@@ -136,7 +148,8 @@ def check_alignment(roots, max_report=20):
     total_missing_from_at_least_one_root (the true count, even when the
     listed sample is truncated to max_report).
     """
-    per_root_paths = {name: collect_relative_paths(root) for name, root in roots.items()}
+    if per_root_paths is None:
+        per_root_paths = {name: collect_relative_paths(root) for name, root in roots.items()}
     all_paths = set()
     for paths in per_root_paths.values():
         all_paths |= paths
@@ -216,13 +229,19 @@ def main():
     parser.add_argument("--lipsync-root", default=DEFAULT_LIPSYNC_ROOT)
     args = parser.parse_args()
 
-    reports = [
-        audit_root("visual", args.visual_root, EXPECTED_DIMS["visual"]),
-        audit_root("audio", args.audio_root, EXPECTED_DIMS["audio"]),
-        audit_root("semantic", args.semantic_root, EXPECTED_DIMS["semantic"]),
-        audit_root("blink", args.blink_root, EXPECTED_DIMS["blink"]),
-        audit_root("lipsync", args.lipsync_root, EXPECTED_DIMS["lipsync"]),
-    ]
+    roots = {
+        "visual": args.visual_root,
+        "audio": args.audio_root,
+        "semantic": args.semantic_root,
+        "blink": args.blink_root,
+        "lipsync": args.lipsync_root,
+    }
+
+    reports = []
+    stream_order = ["visual", "audio", "semantic", "blink", "lipsync"]
+    for i, name in enumerate(stream_order, start=1):
+        print(f"[{i}/{len(stream_order)}] Auditing {name}...", flush=True)
+        reports.append(audit_root(name, roots[name], EXPECTED_DIMS[name], progress_every=5000))
 
     for r in reports:
         _print_stream_report(r)
@@ -249,10 +268,10 @@ def main():
     else:
         print(f"No strong imbalance detected at the {ZERO_VECTOR_IMBALANCE_FLAG_POINTS:.0f}-point threshold used here.")
 
-    alignment = check_alignment({
-        "visual": args.visual_root, "audio": args.audio_root, "semantic": args.semantic_root,
-        "blink": args.blink_root, "lipsync": args.lipsync_root,
-    })
+    alignment = check_alignment(
+        roots,
+        per_root_paths={report["name"]: report["_relative_paths"] for report in reports},
+    )
     print("\n=== CROSS-ROOT ALIGNMENT ===")
     print("(read-only - a sample missing from any root is excluded by create_split.py / "
           "EnhancedFusionDataset, not repaired here.)")

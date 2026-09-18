@@ -97,7 +97,7 @@ export default function EvidenceViewer({ evidence }) {
             </p>
             {ev.blink_events?.length > 0 && (
               <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Detected blink events: {ev.blink_events.map((event) => `${Number(event.start_seconds).toFixed(1)}-${Number(event.end_seconds).toFixed(1)}s`).join(', ')}. These are supporting context only.
+                Detected blink events: {ev.blink_events.map((event) => `${Number.isFinite(Number(event.start_seconds)) ? Number(event.start_seconds).toFixed(1) : 'unknown'}-${Number.isFinite(Number(event.end_seconds)) ? Number(event.end_seconds).toFixed(1) : 'unknown'}s`).join(', ')}. These are supporting context only.
               </p>
             )}
             <BlinkTimeline blinkTimeline={ev.blink_timeline} />

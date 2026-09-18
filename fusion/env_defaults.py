@@ -30,7 +30,7 @@ DEFAULT_LIPSYNC_ROOT = os.environ.get("DFD_LIPSYNC_ROOT", "visual/data/lipsync_f
 
 DEFAULT_FUSION_WEIGHTS = os.environ.get("DFD_FUSION_WEIGHTS", "fusion/best_fusion_model.pt")
 DEFAULT_ENHANCED_FUSION_WEIGHTS = os.environ.get(
-    "DFD_ENHANCED_FUSION_WEIGHTS", "fusion/best_enhanced_fusion_model.pt"
+    "DFD_ENHANCED_FUSION_WEIGHTS", "fusion/best_enhanced_fusion_model_attention.pt"
 )
 
 DEFAULT_VISUAL_CLASSIFIER_WEIGHTS = os.environ.get(

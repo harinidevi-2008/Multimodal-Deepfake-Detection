@@ -1,0 +1,272 @@
+{
+  "generated_utc": "2026-09-18T17:40:19+00:00",
+  "threshold_criterion": "Maximize validation balanced accuracy over unique validation fake-probability scores; break ties by validation F1, then by threshold closest to 0.5. Test labels are never used.",
+  "results": {
+    "visual": {
+      "name": "Visual",
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\classifiers\\best_visual_classifier.pt",
+      "threshold": {
+        "threshold": 0.8200402855873108,
+        "validation_balanced_accuracy": 0.8194749403341288,
+        "validation_f1": 0.8601568839599676
+      },
+      "test": {
+        "n_samples": 3635,
+        "n_real": 200,
+        "n_fake": 3435,
+        "threshold": 0.8200402855873108,
+        "accuracy": 0.8786795048143053,
+        "precision": 0.9764481222151495,
+        "recall": 0.8931586608442503,
+        "f1": 0.9329481526531853,
+        "roc_auc": 0.861447598253275,
+        "pr_auc": 0.9885323711507356,
+        "balanced_accuracy": 0.7615793304221252,
+        "specificity": 0.63,
+        "real_recall": 0.63,
+        "fake_recall": 0.8931586608442503,
+        "confusion_matrix": [
+          [
+            126,
+            74
+          ],
+          [
+            367,
+            3068
+          ]
+        ]
+      }
+    },
+    "audio": {
+      "name": "Audio",
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\classifiers\\best_audio_classifier.pt",
+      "threshold": {
+        "threshold": 0.6406053900718689,
+        "validation_balanced_accuracy": 0.6953221957040573,
+        "validation_f1": 0.9195865893622385
+      },
+      "test": {
+        "n_samples": 3635,
+        "n_real": 200,
+        "n_fake": 3435,
+        "threshold": 0.6406053900718689,
+        "accuracy": 0.8984869325997249,
+        "precision": 0.9699570815450643,
+        "recall": 0.9211062590975255,
+        "f1": 0.9449007018067792,
+        "roc_auc": 0.8292933042212517,
+        "pr_auc": 0.9862542269936849,
+        "balanced_accuracy": 0.7155531295487627,
+        "specificity": 0.51,
+        "real_recall": 0.51,
+        "fake_recall": 0.9211062590975255,
+        "confusion_matrix": [
+          [
+            102,
+            98
+          ],
+          [
+            271,
+            3164
+          ]
+        ]
+      }
+    },
+    "semantic": {
+      "name": "Semantic",
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\classifiers\\best_semantic_classifier.pt",
+      "threshold": {
+        "threshold": 0.557212769985199,
+        "validation_balanced_accuracy": 0.527326968973747,
+        "validation_f1": 0.955794504181601
+      },
+      "test": {
+        "n_samples": 3635,
+        "n_real": 200,
+        "n_fake": 3435,
+        "threshold": 0.557212769985199,
+        "accuracy": 0.8638239339752407,
+        "precision": 0.9473524041387705,
+        "recall": 0.9062590975254731,
+        "f1": 0.9263502454991817,
+        "roc_auc": 0.5556390101892286,
+        "pr_auc": 0.9566148754111777,
+        "balanced_accuracy": 0.5206295487627366,
+        "specificity": 0.135,
+        "real_recall": 0.135,
+        "fake_recall": 0.9062590975254731,
+        "confusion_matrix": [
+          [
+            27,
+            173
+          ],
+          [
+            322,
+            3113
+          ]
+        ]
+      }
+    },
+    "fusion_3_stream": {
+      "name": "3-stream Fusion",
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_fusion_model.pt",
+      "threshold": {
+        "threshold": 0.9035017490386963,
+        "validation_balanced_accuracy": 0.8155727923627685,
+        "validation_f1": 0.9309127584467978
+      },
+      "test": {
+        "n_samples": 3635,
+        "n_real": 200,
+        "n_fake": 3435,
+        "threshold": 0.9035017490386963,
+        "accuracy": 0.9392022008253095,
+        "precision": 0.9788438617401669,
+        "recall": 0.9563318777292577,
+        "f1": 0.9674569282874392,
+        "roc_auc": 0.9199446870451239,
+        "pr_auc": 0.9942628995009407,
+        "balanced_accuracy": 0.8006659388646289,
+        "specificity": 0.645,
+        "real_recall": 0.645,
+        "fake_recall": 0.9563318777292577,
+        "confusion_matrix": [
+          [
+            129,
+            71
+          ],
+          [
+            150,
+            3285
+          ]
+        ]
+      }
+    },
+    "enhanced_base": {
+      "name": "5-stream Enhanced Fusion",
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_enhanced_fusion_model.pt",
+      "threshold": {
+        "threshold": 0.9559223651885986,
+        "validation_balanced_accuracy": 0.84881861575179,
+        "validation_f1": 0.8909952606635071
+      },
+      "test": {
+        "n_samples": 3635,
+        "n_real": 200,
+        "n_fake": 3435,
+        "threshold": 0.9559223651885986,
+        "accuracy": 0.9015130674002751,
+        "precision": 0.9824396362496081,
+        "recall": 0.9120815138282388,
+        "f1": 0.9459541062801933,
+        "roc_auc": 0.9231215429403202,
+        "pr_auc": 0.9947764728881489,
+        "balanced_accuracy": 0.8160407569141194,
+        "specificity": 0.72,
+        "real_recall": 0.72,
+        "fake_recall": 0.9120815138282388,
+        "confusion_matrix": [
+          [
+            144,
+            56
+          ],
+          [
+            302,
+            3133
+          ]
+        ]
+      },
+      "architecture": "attention",
+      "strict_false_missing_keys": [
+        "invalid_retention_logits",
+        "reliability_gates.0.weight",
+        "reliability_gates.0.bias",
+        "reliability_gates.1.weight",
+        "reliability_gates.1.bias",
+        "reliability_gates.2.weight",
+        "reliability_gates.2.bias",
+        "reliability_gates.3.weight",
+        "reliability_gates.3.bias",
+        "reliability_gates.4.weight",
+        "reliability_gates.4.bias"
+      ],
+      "strict_false_unexpected_keys": []
+    },
+    "enhanced_attention": {
+      "name": "5-stream Enhanced Fusion Attention",
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_enhanced_fusion_model_attention.pt",
+      "threshold": {
+        "threshold": 0.9714009761810303,
+        "validation_balanced_accuracy": 0.8435799522673031,
+        "validation_f1": 0.8904686677198526
+      },
+      "test": {
+        "n_samples": 3635,
+        "n_real": 200,
+        "n_fake": 3435,
+        "threshold": 0.9714009761810303,
+        "accuracy": 0.8574965612104539,
+        "precision": 0.9860046651116294,
+        "recall": 0.8614264919941775,
+        "f1": 0.9195152268489745,
+        "roc_auc": 0.9055451237263464,
+        "pr_auc": 0.9931533980937055,
+        "balanced_accuracy": 0.8257132459970888,
+        "specificity": 0.79,
+        "real_recall": 0.79,
+        "fake_recall": 0.8614264919941775,
+        "confusion_matrix": [
+          [
+            158,
+            42
+          ],
+          [
+            476,
+            2959
+          ]
+        ]
+      },
+      "architecture": "attention",
+      "strict_false_missing_keys": [],
+      "strict_false_unexpected_keys": []
+    },
+    "enhanced_gated": {
+      "name": "5-stream Enhanced Fusion Gated",
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_enhanced_fusion_model_gated.pt",
+      "threshold": {
+        "threshold": 0.9830573201179504,
+        "validation_balanced_accuracy": 0.8359427207637231,
+        "validation_f1": 0.8810408921933085
+      },
+      "test": {
+        "n_samples": 3635,
+        "n_real": 200,
+        "n_fake": 3435,
+        "threshold": 0.9830573201179504,
+        "accuracy": 0.8751031636863824,
+        "precision": 0.9847154471544716,
+        "recall": 0.881513828238719,
+        "f1": 0.9302611367127496,
+        "roc_auc": 0.915269286754003,
+        "pr_auc": 0.9940689731827521,
+        "balanced_accuracy": 0.8232569141193595,
+        "specificity": 0.765,
+        "real_recall": 0.765,
+        "fake_recall": 0.881513828238719,
+        "confusion_matrix": [
+          [
+            153,
+            47
+          ],
+          [
+            407,
+            3028
+          ]
+        ]
+      },
+      "architecture": "gated",
+      "strict_false_missing_keys": [],
+      "strict_false_unexpected_keys": []
+    }
+  }
+}
