@@ -2,10 +2,6 @@ import Badge from './ui/Badge'
 import EmptyState from './ui/EmptyState'
 import { toPercent, scoreTone } from '../utils/formatters'
 
-// Backend status vocabulary isn't fully pinned down yet (blink status has
-// been described as both "Irregular" and "Abnormal" across drafts) — treat
-// any of the known "flagged" values as warning-toned, everything else as
-// the calm/consistent tone.
 const FLAGGED_STATUSES = new Set(['Irregular', 'Abnormal', 'Inconsistent'])
 function isFlaggedStatus(status) {
   return FLAGGED_STATUSES.has(status)
@@ -13,10 +9,6 @@ function isFlaggedStatus(status) {
 
 export default function ModalityCard({ meta, data }) {
   const isRuleBased = meta.kind === 'rule_based_score'
-  // `data` can genuinely be missing/null (a partial result), or present but
-  // without the score this modality's "kind" expects - never fabricate a
-  // value in either case, just show the same clean unavailable state a
-  // missing evidence tab already uses elsewhere in this app.
   const value = data ? (isRuleBased ? data.anomaly_score ?? data.mismatch_score : data.fake_probability) : undefined
 
   if (value === undefined || value === null) {
@@ -32,6 +24,7 @@ export default function ModalityCard({ meta, data }) {
   }
 
   const tone = scoreTone(value)
+  const statusLabel = data?.status ? (data.status === 'Abnormal' || data.status === 'Inconsistent' ? 'Anomalous' : 'Consistent') : null
 
   return (
     <div className="card card--tight stack" style={{ gap: 'var(--space-3)' }}>
@@ -41,7 +34,9 @@ export default function ModalityCard({ meta, data }) {
           <span style={{ fontWeight: 700, fontSize: 13.5 }}>{meta.label}</span>
         </div>
         {isRuleBased ? (
-          <Badge tone="neutral">rule-based</Badge>
+          <Badge tone={statusLabel && isFlaggedStatus(data.status) ? 'warning' : 'success'}>
+            {statusLabel || 'Signal'}
+          </Badge>
         ) : (
           <Badge tone="accent">learned</Badge>
         )}
@@ -60,30 +55,10 @@ export default function ModalityCard({ meta, data }) {
         <div className="meter__fill" style={{ width: toPercent(value, 0), background: meta.color }} />
       </div>
 
-      {isRuleBased && data.status && (
-        <Badge tone={isFlaggedStatus(data.status) ? 'warning' : 'success'}>{data.status}</Badge>
-      )}
-
-      {data.evidence_status && (
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-          <strong>Evidence:</strong> {data.evidence_status.replaceAll('_', ' ')}
+      {data?.status && (
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          {data.status}
         </div>
-      )}
-      {data.localization && (
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-          <strong>Localization:</strong> {data.localization.replaceAll('_', ' ')}
-        </div>
-      )}
-      {data.explanation && (
-        <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-          {data.explanation}
-        </p>
-      )}
-
-      {(data.trust || (!data.explanation && meta.description)) && (
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          {data.trust || meta.description}
-        </p>
       )}
     </div>
   )

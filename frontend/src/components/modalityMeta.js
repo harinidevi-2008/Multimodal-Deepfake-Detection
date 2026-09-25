@@ -9,44 +9,44 @@ export const MODALITY_META = {
     label: 'Visual',
     color: 'var(--hue-visual)',
     kind: 'learned_probability',
-    metricLabel: 'Fake probability',
-    description: 'Frame-level classifier trained on visual artifacts and inconsistencies.'
+    metricLabel: 'Fake likelihood',
+    description: 'Learned visual signal.'
   },
   audio: {
     key: 'audio',
     label: 'Audio',
     color: 'var(--hue-audio)',
     kind: 'learned_probability',
-    metricLabel: 'Fake probability',
-    description: 'Classifier trained on the audio track embedding.'
+    metricLabel: 'Fake likelihood',
+    description: 'Learned audio signal.'
   },
   semantic: {
     key: 'semantic',
     label: 'Semantic',
     color: 'var(--hue-semantic)',
     kind: 'learned_probability',
-    metricLabel: 'Fake probability',
-    description: 'Classifier trained on transcript/semantic-content embeddings.'
+    metricLabel: 'Fake likelihood',
+    description: 'Learned semantic signal.'
   },
   eye_blink: {
     key: 'eye_blink',
-    label: 'Eye Blink',
+    label: 'Blink consistency',
     color: 'var(--hue-blink)',
     kind: 'rule_based_score',
-    metricLabel: 'Anomaly score',
-    description: 'Rule-based analysis of blink rate, duration, and eye-aspect-ratio pattern.'
+    metricLabel: 'Consistency',
+    description: 'Supporting blink cue.'
   },
   lip_sync: {
     key: 'lip_sync',
-    label: 'Lip Sync',
+    label: 'Lip-sync consistency',
     color: 'var(--hue-lipsync)',
     kind: 'rule_based_score',
-    metricLabel: 'Mismatch score',
-    description: 'Rule-based correlation between mouth motion and the audio envelope.'
+    metricLabel: 'Consistency',
+    description: 'Supporting audio-visual cue.'
   }
 }
 
 export const MODALITY_ORDER = ['visual', 'audio', 'semantic', 'eye_blink', 'lip_sync']
 
 export const RULE_BASED_CAVEAT =
-  "Eye-blink and lip-sync are rule-based anomaly/mismatch scores, not trained, calibrated probabilities — they're shown on the same 0–100 scale for comparison, but shouldn't be read as \"% chance of fake.\" They feed the fusion model as inputs, they aren't a display-time afterthought."
+  'Blink and lip-sync are supporting consistency cues, not learned fake probabilities.'

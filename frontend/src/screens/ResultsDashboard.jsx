@@ -2,9 +2,7 @@ import OverallResultPanel from '../components/OverallResultPanel'
 import ModalityCard from '../components/ModalityCard'
 import EvidenceViewer from '../components/EvidenceViewer'
 import ContextualAnalysis from '../components/ContextualAnalysis'
-import TechnicalDetails from '../components/TechnicalDetails'
-import InfoTip from '../components/ui/InfoTip'
-import { MODALITY_META, MODALITY_ORDER, RULE_BASED_CAVEAT } from '../components/modalityMeta'
+import { MODALITY_META, MODALITY_ORDER } from '../components/modalityMeta'
 
 export default function ResultsDashboard({ result, onReset }) {
   const modalities = result.modalities || {}
@@ -12,7 +10,7 @@ export default function ResultsDashboard({ result, onReset }) {
   return (
     <div className="stack" style={{ gap: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
-        <h1 style={{ fontSize: 22 }}>Analysis results</h1>
+        <h1 style={{ fontSize: 22 }}>Deepfake Analysis</h1>
         <button className="btn btn-secondary btn-sm" onClick={onReset}>
           Analyze another video
         </button>
@@ -21,11 +19,7 @@ export default function ResultsDashboard({ result, onReset }) {
       <OverallResultPanel result={result} />
 
       <div className="section-heading">
-        <h2>Stream Analysis</h2>
-        <span className="section-heading__hint" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          Learned vs. rule-based signals
-          <InfoTip text={RULE_BASED_CAVEAT} />
-        </span>
+        <h2>Modality Analysis</h2>
       </div>
       <div className="grid grid-cols-5" style={{ gap: 'var(--space-4)' }}>
         {MODALITY_ORDER.map((key) => (
@@ -34,7 +28,7 @@ export default function ResultsDashboard({ result, onReset }) {
       </div>
 
       <div className="section-heading">
-        <h2>Why This Result</h2>
+        <h2>Why This Video Was Flagged</h2>
       </div>
       <ContextualAnalysis contextualAnalysis={result.contextual_analysis} />
 
@@ -42,11 +36,6 @@ export default function ResultsDashboard({ result, onReset }) {
         <h2>Evidence</h2>
       </div>
       <EvidenceViewer evidence={result.evidence} />
-
-      <div className="section-heading">
-        <h2>Advanced Diagnostics</h2>
-      </div>
-      <TechnicalDetails result={result} />
     </div>
   )
 }
