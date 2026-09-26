@@ -1,3 +1,15 @@
+import os
+
+# The installed sentence-transformers release has no local_files_only
+# constructor argument. Its hub client may already be imported by other
+# pipeline modules, so update its runtime flag and reset cached sessions too.
+os.environ["HF_HUB_OFFLINE"] = "1"
+from huggingface_hub import constants as hf_constants
+from huggingface_hub.utils import _http as hf_http
+
+hf_constants.HF_HUB_OFFLINE = True
+hf_http.reset_sessions()
+
 import torch
 import torch.nn as nn
 import whisper

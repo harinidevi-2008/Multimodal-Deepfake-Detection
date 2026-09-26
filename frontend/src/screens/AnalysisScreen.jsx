@@ -2,31 +2,28 @@ import { useEffect, useRef, useState } from 'react'
 import { ANALYSIS_STAGES, analyzeVideo } from '../api/analyzeVideo'
 
 export default function AnalysisScreen({ file, onComplete, onError }) {
-  const [completedStages, setCompletedStages] = useState([])
+  const [jobStatus, setJobStatus] = useState({
+    status: 'queued', stage: 'queued', message: 'Queued for analysis.'
+  })
   const previewUrl = useRef(file ? URL.createObjectURL(file) : null)
   const started = useRef(false)
 
   useEffect(() => {
     if (started.current) return
     started.current = true
-    analyzeVideo(file, (stageKey) => {
-      setCompletedStages((prev) => (prev.includes(stageKey) ? prev : [...prev, stageKey]))
-    })
+    analyzeVideo(file, setJobStatus)
       .then(onComplete)
       .catch((err) => onError?.(err))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const activeIndex = completedStages.length
+  const activeIndex = ANALYSIS_STAGES.findIndex((stage) => stage.key === jobStatus.stage)
 
   return (
     <div className="stack" style={{ gap: 'var(--space-6)', maxWidth: 680, margin: '0 auto' }}>
       <div className="stack" style={{ gap: 'var(--space-2)', textAlign: 'center' }}>
-        <h1 style={{ fontSize: 24 }}>Analyzing your video…</h1>
-        <p style={{ color: 'var(--text-secondary)' }}>
-          The backend runs the full detection pipeline as a single request — the checklist
-          below shows expected progress, not live per-stage signals from the server.
-        </p>
+        <h1 style={{ fontSize: 24 }}>Analyzing your video...</h1>
+        <p style={{ color: 'var(--text-secondary)' }}>{jobStatus.message}</p>
       </div>
 
       <div className="card">
@@ -55,7 +52,7 @@ export default function AnalysisScreen({ file, onComplete, onError }) {
 
           <ol className="stack" style={{ gap: 'var(--space-3)', listStyle: 'none', margin: 0, padding: 0 }}>
             {ANALYSIS_STAGES.map((stage, i) => {
-              const isDone = i < activeIndex
+              const isDone = activeIndex >= 0 && i < activeIndex
               const isActive = i === activeIndex
               return (
                 <li key={stage.key} className="stack" style={{ flexDirection: 'row', alignItems: 'center', gap: 'var(--space-3)' }}>
@@ -77,16 +74,6 @@ export default function AnalysisScreen({ file, onComplete, onError }) {
               )
             })}
           </ol>
-        </div>
-
-        <div className="meter" style={{ marginTop: 'var(--space-5)' }}>
-          <div
-            className="meter__fill"
-            style={{
-              width: `${Math.min(100, (activeIndex / ANALYSIS_STAGES.length) * 100)}%`,
-              background: 'var(--accent)'
-            }}
-          />
         </div>
       </div>
     </div>
@@ -110,7 +97,7 @@ function StageIcon({ state }) {
           flexShrink: 0
         }}
       >
-        ✓
+        OK
       </span>
     )
   }

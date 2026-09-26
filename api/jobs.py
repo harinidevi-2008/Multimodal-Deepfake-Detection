@@ -27,6 +27,7 @@ signature is (relative_path, visual_root, ...) and joins them itself.
 """
 
 import shutil
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -43,6 +44,34 @@ RELATIVE_FEATURE_PATH = Path("sample.npy")
 # Jobs older than this are eligible for cleanup on the next /api/analyze
 # call (a simple, dependency-free policy - no background scheduler).
 JOB_MAX_AGE_SECONDS = 2 * 60 * 60  # 2 hours
+
+_STATUS_LOCK = threading.Lock()
+_JOB_STATUS = {}
+
+
+def update_status(job_id, *, status, stage, progress, message, result=None, error=None):
+    """Keep small, local status records for active API jobs."""
+    with _STATUS_LOCK:
+        record = _JOB_STATUS.get(job_id, {})
+        record.update({
+            "job_id": job_id,
+            "status": status,
+            "stage": stage,
+            "progress": progress,
+            "message": message,
+            "updated_at": time.time(),
+        })
+        if result is not None:
+            record["result"] = result
+        if error is not None:
+            record["error"] = error
+        _JOB_STATUS[job_id] = record
+
+
+def get_status(job_id):
+    with _STATUS_LOCK:
+        record = _JOB_STATUS.get(job_id)
+        return dict(record) if record is not None else None
 
 
 class Job:
@@ -88,6 +117,8 @@ def new_job() -> Job:
     JOBS_ROOT.mkdir(parents=True, exist_ok=True)
     job = Job(uuid.uuid4().hex)
     job.create_dirs()
+    update_status(job.job_id, status="queued", stage="queued", progress=0,
+                  message="Upload received. Waiting to start analysis.")
     return job
 
 

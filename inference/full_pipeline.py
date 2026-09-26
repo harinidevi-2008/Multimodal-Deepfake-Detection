@@ -67,6 +67,7 @@ or falls back to the old 3-modal checkpoint for a missing 5-modal one.
 
 import json
 import sys
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -259,7 +260,21 @@ def load_feature_vector(path, modality_name):
     return vector
 
 
-def load_single_stream_probability(feature, weights_path, input_dim):
+def feature_statistics(feature):
+    """Return compact, JSON-safe diagnostics without changing a feature."""
+    return {
+        "shape": list(feature.shape),
+        "dtype": str(feature.dtype),
+        "min": float(np.min(feature)),
+        "max": float(np.max(feature)),
+        "mean": float(np.mean(feature)),
+        "std": float(np.std(feature)),
+        "finite": bool(np.isfinite(feature).all()),
+        "zero_fraction": float(np.mean(feature == 0)),
+    }
+
+
+def load_single_stream_probability(feature, weights_path, input_dim, return_logits=False):
     """
     feature: an already-loaded, already-shape-validated np.ndarray for
     this stream (see load_feature_vector) - loaded once by the caller
@@ -273,6 +288,8 @@ def load_single_stream_probability(feature, weights_path, input_dim):
     with torch.inference_mode():
         logits = model(torch.from_numpy(feature).unsqueeze(0))
         prob = torch.softmax(logits, dim=1)[0, 1].item()
+    if return_logits:
+        return prob, [float(value) for value in logits[0].tolist()]
     return prob
 
 
@@ -312,6 +329,7 @@ def run_full_inference(
     video_path=None,
     frame_output_dir=None,
     blink_events=None,
+    precomputed_lipsync_result=None,
 ):
     """
     relative_path: path relative to each of the five feature roots,
@@ -353,15 +371,17 @@ def run_full_inference(
     blink_vector = load_feature_vector(Path(blink_root) / rel, "blink")
     lipsync_vector = load_feature_vector(Path(lipsync_root) / rel, "lipsync")
 
-    visual_fake_probability = load_single_stream_probability(
-        visual_feat, visual_classifier_weights, 1280
+    classifier_started = time.monotonic()
+    visual_fake_probability, visual_logits = load_single_stream_probability(
+        visual_feat, visual_classifier_weights, 1280, return_logits=True
     )
-    audio_fake_probability = load_single_stream_probability(
-        audio_feat, audio_classifier_weights, 768
+    audio_fake_probability, audio_logits = load_single_stream_probability(
+        audio_feat, audio_classifier_weights, 768, return_logits=True
     )
-    semantic_fake_probability = load_single_stream_probability(
-        semantic_feat, semantic_classifier_weights, 384
+    semantic_fake_probability, semantic_logits = load_single_stream_probability(
+        semantic_feat, semantic_classifier_weights, 384, return_logits=True
     )
+    classifier_inference_seconds = time.monotonic() - classifier_started
 
     # blink vector: [blink_count, blink_rate_per_min, avg_blink_duration_sec, blink_irregularity_score]
     blink_irregularity_score = float(blink_vector[3])
@@ -410,8 +430,30 @@ def run_full_inference(
         torch.from_numpy(x).unsqueeze(0)
         for x in (visual_feat, audio_feat, semantic_feat, blink_feat, lipsync_feat)
     ]
+    fusion_input_diagnostics = {
+        "before_normalization": {
+            "visual": feature_statistics(visual_feat),
+            "audio": feature_statistics(audio_feat),
+            "semantic": feature_statistics(semantic_feat),
+            "blink": feature_statistics(blink_vector),
+            "lipsync": feature_statistics(lipsync_vector),
+        },
+        "fusion_tensors": {
+            name: {
+                **feature_statistics(feature),
+                "tensor_shape": list(tensor.shape),
+                "device": str(tensor.device),
+            }
+            for name, feature, tensor in zip(
+                MODALITY_ORDER_5,
+                (visual_feat, audio_feat, semantic_feat, blink_feat, lipsync_feat),
+                tensors,
+            )
+        },
+    }
     reliability = default_reliability(tensors[2])
 
+    fusion_started = time.monotonic()
     fusion_model = EnhancedFusionModel(
         fusion_architecture=architecture_for_checkpoint(enhanced_fusion_weights)
     )
@@ -433,6 +475,7 @@ def run_full_inference(
         probs = torch.softmax(logits, dim=1)
         final_fake_probability = probs[0, 1].item()
         final_real_probability = probs[0, 0].item()
+    fusion_inference_seconds = time.monotonic() - fusion_started
     decision_threshold, threshold_source = load_calibrated_threshold(enhanced_fusion_weights, thresholds_path)
     prediction = "DEEPFAKE" if final_fake_probability >= decision_threshold else "REAL"
 
@@ -443,6 +486,7 @@ def run_full_inference(
         }
     else:
         attention_summary = summarize_attention(attention, MODALITY_ORDER_5)
+    evidence_started = time.monotonic()
     contribution = modality_contributions(fusion_model, tensors, MODALITY_ORDER_5)
 
     evidence = build_evidence_report(
@@ -483,7 +527,10 @@ def run_full_inference(
     # score in both cases - this does not recompute it differently.
     window_evidence = WINDOW_EVIDENCE_UNAVAILABLE_NOTE
     lipsync_window_evidence_available = False
-    if video_path is not None:
+    if precomputed_lipsync_result is not None:
+        window_evidence = precomputed_lipsync_result.get("window_evidence", [])
+        lipsync_window_evidence_available = True
+    elif video_path is not None:
         try:
             lipsync_result = analyze_lipsync(video_path, compute_windows=True)
             window_evidence = lipsync_result.get("window_evidence", [])
@@ -498,6 +545,7 @@ def run_full_inference(
         "lip_sync_window_evidence": lipsync_window_evidence_available,
         "visual_artifact_detection": False,
     }
+    evidence_generation_seconds = time.monotonic() - evidence_started
 
     return {
         "final_fake_probability": round(final_fake_probability, 4),
@@ -515,6 +563,23 @@ def run_full_inference(
         "modality_contributions": contribution,
         "fusion_diagnostics": {
             "raw_logits": [round(float(value), 6) for value in logits[0].cpu().tolist()],
+            "individual_classifier_logits": {
+                "visual": [round(value, 6) for value in visual_logits],
+                "audio": [round(value, 6) for value in audio_logits],
+                "semantic": [round(value, 6) for value in semantic_logits],
+            },
+            "individual_classifier_fake_probabilities": {
+                "visual": round(visual_fake_probability, 6),
+                "audio": round(audio_fake_probability, 6),
+                "semantic": round(semantic_fake_probability, 6),
+            },
+            "fusion_input_diagnostics": fusion_input_diagnostics,
+            "normalization": {
+                "applied": normalization_used,
+                "path": str(Path(normalization_path).resolve()) if normalization_used else None,
+                "fit_on_split": normalization.get("metadata", {}).get("fit_on_split") if normalization else None,
+                "modalities": ["blink", "lipsync"] if normalization_used else [],
+            },
             "softmax_probabilities": {
                 "real": round(final_real_probability, 6),
                 "fake": round(final_fake_probability, 6),
@@ -545,6 +610,11 @@ def run_full_inference(
         "normalization_applied": normalization_used,
         "normalization_warning": normalization_warning,
         "evidence_availability": evidence_availability,
+        "_inference_timing_seconds": {
+            "classifier_inference": classifier_inference_seconds,
+            "fusion_inference": fusion_inference_seconds,
+            "evidence_generation": evidence_generation_seconds,
+        },
     }
 
 

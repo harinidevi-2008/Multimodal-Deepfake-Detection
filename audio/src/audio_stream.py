@@ -66,10 +66,12 @@ def _get_wav2vec2():
         from transformers import Wav2Vec2Model, Wav2Vec2Processor
 
         logger.info("Loading Wav2Vec2 Processor...")
-        _wav2vec2_processor = Wav2Vec2Processor.from_pretrained(MODEL_NAME)
+        _wav2vec2_processor = Wav2Vec2Processor.from_pretrained(
+            MODEL_NAME, local_files_only=True
+        )
 
         logger.info("Loading Wav2Vec2 Model...")
-        model = Wav2Vec2Model.from_pretrained(MODEL_NAME)
+        model = Wav2Vec2Model.from_pretrained(MODEL_NAME, local_files_only=True)
         model.eval()
 
         # Freeze Wav2Vec2 parameters

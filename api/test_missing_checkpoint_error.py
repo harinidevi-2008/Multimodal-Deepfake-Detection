@@ -32,6 +32,7 @@ Run: python api/test_missing_checkpoint_error.py
 
 import io
 import sys
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -87,7 +88,7 @@ def check_api_returns_structured_missing_checkpoint_error():
     from api.server import app
     from api.errors import MissingCheckpointAPIError
 
-    def fake_run_raw_video_analysis(video_path, job):
+    def fake_run_raw_video_analysis(video_path, job, progress_callback=None):
         # Stands in for the real pipeline call - only the error-mapping
         # and HTTP/JSON contract are under test here, not real feature
         # extraction or inference (see api/test_serializer_smoke.py and
@@ -104,12 +105,26 @@ def check_api_returns_structured_missing_checkpoint_error():
     with patch("api.server.run_raw_video_analysis", side_effect=fake_run_raw_video_analysis):
         fake_video = io.BytesIO(b"stand-in bytes - this request never reaches real video decoding")
         response = client.post("/api/analyze", files={"video": ("clip.mp4", fake_video, "video/mp4")})
+        if response.status_code != 202:
+            print(f"[FAIL] expected HTTP 202, got {response.status_code}: {response.text}")
+            return False
 
-    if response.status_code != 503:
-        print(f"[FAIL] expected HTTP 503, got {response.status_code}: {response.text}")
+        queued = response.json()
+        if not queued.get("job_id") or queued.get("status") not in ("queued", "processing"):
+            print(f"[FAIL] POST /api/analyze did not return an analysis job: {queued!r}")
+            return False
+
+        body = None
+        for _ in range(50):
+            status_response = client.get(f"/api/analyze/{queued['job_id']}/status")
+            body = status_response.json()
+            if body.get("status") == "failed":
+                break
+            time.sleep(0.01)
+    if body.get("status") != "failed":
+        print(f"[FAIL] analysis job did not report failure: {body!r}")
         return False
-
-    body = response.json()
+    body = body.get("error", {})
     if body.get("error") != "missing_checkpoint":
         print(f"[FAIL] expected error='missing_checkpoint', got {body!r}")
         return False

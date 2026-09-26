@@ -178,6 +178,21 @@ def main():
             sys.exit(1)
         print(f"[PASS] prediction agrees with the returned threshold ({decision_threshold:.6f}).")
 
+        diagnostics = result["fusion_diagnostics"]
+        for key in (
+            "individual_classifier_logits",
+            "individual_classifier_fake_probabilities",
+            "fusion_input_diagnostics",
+            "normalization",
+        ):
+            if key not in diagnostics:
+                print(f"[FAIL] fusion_diagnostics is missing {key!r}.")
+                sys.exit(1)
+        if diagnostics["fusion_input_diagnostics"]["fusion_tensors"]["visual"]["tensor_shape"] != [1, 1280]:
+            print("[FAIL] fusion diagnostics did not preserve the visual tensor shape.")
+            sys.exit(1)
+        print("[PASS] fusion diagnostics include classifier logits, input summaries, and normalization provenance.")
+
         attention_summary = result["attention_summary"]
         contribution = result["modality_contributions"]
         five_modalities = {"visual", "audio", "semantic", "blink", "lipsync"}

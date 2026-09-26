@@ -13,10 +13,11 @@ Run (from the repo root, inside the project's venv):
 
 import datetime
 import logging
+import threading
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
@@ -28,7 +29,7 @@ from api.errors import (
     UnsupportedMediaTypeError,
     install_error_handlers,
 )
-from api.jobs import JOBS_ROOT, new_job, sweep_old_jobs
+from api.jobs import JOBS_ROOT, get_status, new_job, sweep_old_jobs, update_status
 from api.pipeline_adapter import run_raw_video_analysis
 from api.serializer import serialize_result
 
@@ -68,7 +69,7 @@ async def health():
     return {"status": "ok"}
 
 
-@app.post("/api/analyze")
+@app.post("/api/analyze", status_code=status.HTTP_202_ACCEPTED)
 async def analyze(video: UploadFile = File(None)):
     if video is None or not video.filename:
         raise MissingVideoError("No video file was provided.")
@@ -101,24 +102,86 @@ async def analyze(video: UploadFile = File(None)):
         if size == 0:
             raise MissingVideoError("The uploaded video file was empty.")
 
-        start = time.monotonic()
-        result, meta = await run_in_threadpool(run_raw_video_analysis, upload_path, job)
-        processing_time_seconds = time.monotonic() - start
-
-        analyzed_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        return serialize_result(
-            result,
-            meta,
-            job_id=job.job_id,
-            video_filename=video.filename,
-            processing_time_seconds=processing_time_seconds,
-            analyzed_at=analyzed_at,
-        )
+        threading.Thread(
+            target=_run_analysis_job,
+            args=(upload_path, job, video.filename),
+            daemon=True,
+        ).start()
+        return get_status(job.job_id)
     finally:
         # Keep the upload until the job directory expires so the UI can
         # replay genuine source audio/video for evidence review. Old
         # jobs are still cleaned up by sweep_old_jobs().
         pass
+
+
+def _run_analysis_job(upload_path: Path, job, video_filename: str):
+    """Run one uploaded video while exposing only actual pipeline stages."""
+    started_at = time.monotonic()
+
+    def report(event):
+        update_status(job.job_id, status="processing", **event)
+
+    try:
+        update_status(
+            job.job_id,
+            status="processing",
+            stage="probing_video",
+            progress=None,
+            message="Starting analysis.",
+        )
+        result, meta = run_raw_video_analysis(upload_path, job, progress_callback=report)
+        update_status(
+            job.job_id,
+            status="processing",
+            stage="serializing",
+            progress=None,
+            message="Building analysis evidence.",
+        )
+        serialized = serialize_result(
+            result,
+            meta,
+            job_id=job.job_id,
+            video_filename=video_filename,
+            processing_time_seconds=time.monotonic() - started_at,
+            analyzed_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        )
+        update_status(
+            job.job_id,
+            status="completed",
+            stage="completed",
+            progress=100,
+            message="Analysis complete.",
+            result=serialized,
+        )
+    except Exception as exc:  # noqa: BLE001 - persist an API-safe job error
+        logger.exception("Analysis job %s failed", job.job_id)
+        if hasattr(exc, "to_body"):
+            error = exc.to_body()
+        else:
+            error = {
+                "error": "internal_error",
+                "message": "Something went wrong processing this request.",
+                "details": None,
+            }
+        update_status(
+            job.job_id,
+            status="failed",
+            stage="failed",
+            progress=None,
+            message=error["message"],
+            error=error,
+        )
+
+
+@app.get("/api/analyze/{job_id}/status")
+async def analysis_status(job_id: str):
+    if not job_id.isalnum():
+        raise NotFoundError("No such job.")
+    status = get_status(job_id)
+    if status is None:
+        raise NotFoundError("No such job.")
+    return status
 
 
 @app.get("/api/evidence/{job_id}/{filename}")

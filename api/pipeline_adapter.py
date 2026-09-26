@@ -338,15 +338,21 @@ def _extract_blink(video_path: Path, job: Job):
 def _extract_lipsync(video_path: Path, job: Job):
     out_path = job.feature_path(job.lipsync_root)
     try:
-        result = analyze_lipsync(str(video_path))
+        result = analyze_lipsync(str(video_path), compute_windows=True)
         np.save(out_path, lipsync_result_to_vector(result))
     except Exception as exc:  # noqa: BLE001
         raise FeatureExtractionFailedError(
             "Lip-sync analysis failed.", details=f"visual/src/lipsync/lipsync_analyzer.py: {exc}"
         ) from exc
+    return result
 
 
-def _run_raw_video_analysis(video_path: Path, job: Job) -> dict:
+def _emit_progress(callback, stage, message):
+    if callback is not None:
+        callback({"stage": stage, "progress": None, "message": message})
+
+
+def _run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) -> dict:
     """
     Full raw-video pipeline for one uploaded file, already saved at
     video_path under job.upload_dir.
@@ -369,29 +375,35 @@ def _run_raw_video_analysis(video_path: Path, job: Job) -> dict:
     """
     video_path = Path(video_path)
 
+    _emit_progress(progress_callback, "probing_video", "Reading video metadata")
     meta = _probe_video(video_path)
 
     # Five per-stream extraction steps, each reusing the repo's own
     # existing extraction function - none reimplemented here.
     stage_started = time.monotonic()
+    _emit_progress(progress_callback, "extracting_visual", "Extracting visual features")
     logger.info("[1/7] Extracting visual features...")
     _extract_visual(video_path, job)
     logger.info("[1/7] Extracting visual features completed in %.3fs", time.monotonic() - stage_started)
     stage_started = time.monotonic()
+    _emit_progress(progress_callback, "extracting_audio", "Extracting audio features")
     logger.info("[2/7] Extracting audio...")
     audio_evidence = _extract_audio(video_path, job)
     logger.info("[2/7] Extracting audio completed in %.3fs", time.monotonic() - stage_started)
     stage_started = time.monotonic()
+    _emit_progress(progress_callback, "extracting_semantic", "Extracting semantic features")
     logger.info("[3/7] Semantic embedding...")
     semantic_metadata = _extract_semantic(video_path, job)
     logger.info("[3/7] Semantic embedding completed in %.3fs", time.monotonic() - stage_started)
     stage_started = time.monotonic()
+    _emit_progress(progress_callback, "extracting_blink", "Analyzing eye-blink patterns")
     logger.info("[4/7] Blink analysis...")
     blink_events, blink_timeline = _extract_blink(video_path, job)
     logger.info("[4/7] Blink analysis completed in %.3fs", time.monotonic() - stage_started)
     stage_started = time.monotonic()
+    _emit_progress(progress_callback, "extracting_lipsync", "Analyzing lip synchronization")
     logger.info("[5/7] Lip-sync analysis...")
-    _extract_lipsync(video_path, job)
+    lipsync_result = _extract_lipsync(video_path, job)
     logger.info("[5/7] Lip-sync analysis completed in %.3fs", time.monotonic() - stage_started)
 
     feature_health_report = {
@@ -407,7 +419,9 @@ def _run_raw_video_analysis(video_path: Path, job: Job) -> dict:
 
     try:
         stage_started = time.monotonic()
+        _emit_progress(progress_callback, "running_classifiers", "Loading learned classifiers")
         logger.info("[6/7] Loading checkpoints...")
+        _emit_progress(progress_callback, "running_fusion", "Running five-stream fusion")
         logger.info("[7/7] Running fusion inference...")
         result = run_full_inference(
             str(RELATIVE_FEATURE_PATH),
@@ -427,9 +441,14 @@ def _run_raw_video_analysis(video_path: Path, job: Job) -> dict:
             video_path=str(video_path),
             frame_output_dir=str(job.evidence_dir),
             blink_events=blink_events,
+            precomputed_lipsync_result=lipsync_result,
         )
         logger.info("[6/7] Loading checkpoints completed in %.3fs", time.monotonic() - stage_started)
         logger.info("[7/7] Running fusion inference completed in %.3fs", time.monotonic() - stage_started)
+        timings = result.get("_inference_timing_seconds", {})
+        logger.info("Classifier inference completed in %.3fs", timings.get("classifier_inference", 0.0))
+        logger.info("Fusion inference completed in %.3fs", timings.get("fusion_inference", 0.0))
+        logger.info("Evidence generation completed in %.3fs", timings.get("evidence_generation", 0.0))
     except MissingCheckpointError as exc:
         # Expected, correct, by-design: real training has not yet
         # produced these checkpoints. Never faked, never downgraded to
@@ -476,14 +495,18 @@ def _run_raw_video_analysis(video_path: Path, job: Job) -> dict:
     result["_feature_health"] = feature_health_report
     result["_semantic_metadata"] = semantic_metadata
     result["_audio_evidence"] = audio_evidence
+    _emit_progress(progress_callback, "completed", "Analysis complete")
 
     return result, meta
 
 
-def _analysis_worker(video_path, job_id, result_queue):
+def _analysis_worker(video_path, job_id, result_queue, progress_queue):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
-        result, meta = _run_raw_video_analysis(Path(video_path), Job(job_id))
+        result, meta = _run_raw_video_analysis(
+            Path(video_path), Job(job_id),
+            progress_callback=lambda event: progress_queue.put(event),
+        )
         result_path = Job(job_id).dir / "analysis_result.json"
         logger.info("Preparing completed analysis for IPC: %s", result_path)
         with result_path.open("w", encoding="utf-8") as output:
@@ -525,7 +548,7 @@ def _missing_checkpoint_paths():
     return [path for path in paths if not (REPO_ROOT / path).is_file()]
 
 
-def run_raw_video_analysis(video_path: Path, job: Job) -> dict:
+def run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) -> dict:
     missing = _missing_checkpoint_paths()
     if missing:
         logger.error("Required checkpoints missing: %s", missing)
@@ -535,14 +558,24 @@ def run_raw_video_analysis(video_path: Path, job: Job) -> dict:
 
     context = multiprocessing.get_context("spawn")
     result_queue = context.Queue()
+    progress_queue = context.Queue()
     process = context.Process(
         target=_analysis_worker,
-        args=(str(video_path), job.job_id, result_queue),
+        args=(str(video_path), job.job_id, result_queue, progress_queue),
     )
     started_at = time.monotonic()
     logger.info("Raw-video analysis started at %.3f", started_at)
     process.start()
-    process.join(ANALYSIS_TIMEOUT_SECONDS)
+    deadline = started_at + ANALYSIS_TIMEOUT_SECONDS
+    while process.is_alive() and time.monotonic() < deadline:
+        process.join(0.2)
+        while True:
+            try:
+                event = progress_queue.get_nowait()
+                if progress_callback is not None:
+                    progress_callback(event)
+            except queue.Empty:
+                break
     if process.is_alive():
         logger.error("Raw-video analysis timed out after %ss; terminating worker", ANALYSIS_TIMEOUT_SECONDS)
         process.terminate()
@@ -563,6 +596,8 @@ def run_raw_video_analysis(video_path: Path, job: Job) -> dict:
     finally:
         result_queue.close()
         result_queue.join_thread()
+        progress_queue.close()
+        progress_queue.join_thread()
 
     logger.info("Raw-video analysis ended at %.3f", time.monotonic())
     if status == "ok":
