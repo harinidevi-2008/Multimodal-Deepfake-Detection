@@ -1,10 +1,26 @@
 import logging
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# Dataset
-INPUT_FOLDER = PROJECT_ROOT / "FakeAVCeleb_v1.2"
+# Dataset. FakeAVCeleb remains the default; select FF++ explicitly with
+# DATASET_NAME=ffpp or point DATASET_ROOT at a dataset root.
+DATASET_NAME = os.environ.get("DATASET_NAME", "fakeavceleb").strip().lower()
+FFPP_SOURCES = (
+    ("original_sequences/youtube", 0),
+    ("original_sequences/actors", 0),
+    ("manipulated_sequences/Deepfakes", 1),
+    ("manipulated_sequences/Face2Face", 1),
+    ("manipulated_sequences/FaceSwap", 1),
+    ("manipulated_sequences/NeuralTextures", 1),
+)
+_DEFAULT_DATASET_ROOT = (
+    PROJECT_ROOT / "Datasets" / "FaceForensics++" / "data"
+    if DATASET_NAME == "ffpp"
+    else PROJECT_ROOT / "FakeAVCeleb_v1.2"
+)
+INPUT_FOLDER = Path(os.environ.get("DATASET_ROOT", _DEFAULT_DATASET_ROOT))
 
 # Temporary extracted audio
 AUDIO_FOLDER = PROJECT_ROOT / "temp_audio"

@@ -7,12 +7,12 @@ import numpy as np
 from tqdm import tqdm
 
 try:
-    from .config import OUTPUT_FOLDER, VIDEO_FOLDER, DEFAULT_FPS_TARGET, configure_logging
+    from .config import OUTPUT_FOLDER, VIDEO_FOLDER, DATASET_NAME, FFPP_SOURCES, DEFAULT_FPS_TARGET, configure_logging
     from .extract_frames import extract_frames
     from .face_detector import get_aligned_face
     from .feature_extractor import get_feature_vector
 except ImportError:
-    from config import OUTPUT_FOLDER, VIDEO_FOLDER, DEFAULT_FPS_TARGET, configure_logging
+    from config import OUTPUT_FOLDER, VIDEO_FOLDER, DATASET_NAME, FFPP_SOURCES, DEFAULT_FPS_TARGET, configure_logging
     from extract_frames import extract_frames
     from face_detector import get_aligned_face
     from feature_extractor import get_feature_vector
@@ -72,7 +72,16 @@ def process_video(video_path, output_path):
 def process_directory(video_folder=VIDEO_FOLDER, output_folder=OUTPUT_FOLDER):
     output_folder.mkdir(parents=True, exist_ok=True)
 
-    video_files = sorted(video_folder.rglob("*.mp4"))
+    if Path(video_folder).resolve() == Path(VIDEO_FOLDER).resolve():
+        if DATASET_NAME == "ffpp":
+            video_files = sorted(
+                video for source, _label in FFPP_SOURCES
+                for video in (Path(video_folder) / source / "c23" / "videos").rglob("*.mp4")
+            )
+        else:
+            video_files = sorted(Path(video_folder).rglob("*.mp4"))
+    else:
+        video_files = sorted(Path(video_folder).rglob("*.mp4"))
 
     logger.info("Found %d videos", len(video_files))
 
@@ -80,6 +89,8 @@ def process_directory(video_folder=VIDEO_FOLDER, output_folder=OUTPUT_FOLDER):
         relative_path = video_path.relative_to(video_folder)
         output_path = output_folder / relative_path.with_suffix(".npy")
 
+        if output_path.exists():
+            continue
         process_video(str(video_path), str(output_path))
 
     return output_folder

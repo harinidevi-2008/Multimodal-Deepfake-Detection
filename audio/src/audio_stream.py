@@ -20,6 +20,8 @@ from tqdm import tqdm
 try:
     from .config import (
         INPUT_FOLDER,
+        DATASET_NAME,
+        FFPP_SOURCES,
         AUDIO_FOLDER,
         OUTPUT_FOLDER,
         MODEL_NAME,
@@ -32,6 +34,8 @@ try:
 except ImportError:
     from config import (
         INPUT_FOLDER,
+        DATASET_NAME,
+        FFPP_SOURCES,
         AUDIO_FOLDER,
         OUTPUT_FOLDER,
         MODEL_NAME,
@@ -238,8 +242,11 @@ def process_directory():
 
     video_files = []
 
-    for ext in SUPPORTED_EXTENSIONS:
-        video_files.extend(INPUT_FOLDER.rglob(f"*{ext}"))
+    scan_roots = ([INPUT_FOLDER / source / "c23" / "videos" for source, _label in FFPP_SOURCES]
+                  if DATASET_NAME == "ffpp" else [INPUT_FOLDER])
+    for scan_root in scan_roots:
+        for ext in SUPPORTED_EXTENSIONS:
+            video_files.extend(scan_root.rglob(f"*{ext}"))
 
     video_files = sorted(video_files)
 
