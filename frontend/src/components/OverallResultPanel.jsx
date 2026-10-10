@@ -20,7 +20,7 @@ export default function OverallResultPanel({ result }) {
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
           <h2 style={{ fontSize: 42, margin: 0, color: 'var(--accent-strong)' }}>
-            {fakePct === null ? 'Not available' : toPercent(fakePct, 0)}
+            {hasScore ? toPercent(fakeLikelihood, 0) : 'Unavailable'}
           </h2>
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
             {result.video_filename || 'Uploaded video'}

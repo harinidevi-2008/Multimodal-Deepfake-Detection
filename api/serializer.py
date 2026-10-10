@@ -13,8 +13,9 @@ keep that straight, this module calls the former `evidence_report` and
 reserves `evidence` for the contract's evidence block.
 """
 
-from pathlib import Path
 import math
+from numbers import Real
+from pathlib import Path
 
 from api.errors import InferenceFailedError
 
@@ -224,6 +225,7 @@ def _modality_explanations(result, blink_status, lip_sync_status):
 
 
 def _build_contextual_analysis(result, evidence_report, lip_sync_status, blink_status):
+    final_verdict = "likely deepfake" if result.get("prediction") == "DEEPFAKE" else "likely real"
     audio_missing_reason = (
         (result.get("_audio_evidence") or {}).get("reason")
         or result.get("_no_audio_reason")
@@ -284,12 +286,12 @@ def _build_contextual_analysis(result, evidence_report, lip_sync_status, blink_s
         "contradicting_signals": contradicting,
         "cross_modal_interpretation": (
             f"Evidence consistency is {consistency.lower()} and modality disagreement is {disagreement.lower()}. "
-            + ("Trained five-stream fusion was skipped because the audio feature was unavailable."
+            + ("Three-stream fusion was unavailable because a required learned feature was unavailable."
                if result.get("final_fake_probability") is None else
                "The final fusion score is independent from the displayed modality probabilities: the model consumes learned feature representations and can legitimately disagree with any one modality signal.")
         ),
         "fusion_interpretation": (
-            "Trained five-stream fusion is unavailable because the audio feature was unavailable."
+            "Three-stream fusion is unavailable because a required learned feature was unavailable."
             if result.get("final_fake_probability") is None
             else f"The fusion model assigns {result['final_fake_probability']:.1%} fake probability. "
                  "This output comes from learned feature embeddings and cross-modal fusion."
@@ -304,7 +306,7 @@ def _build_contextual_analysis(result, evidence_report, lip_sync_status, blink_s
                                   if entry["modality"] != "lip_sync" or result.get("lip_sync_mismatch_score") is not None],
         "explanation": (
             f"Evidence consistency is {consistency.lower()} and modality disagreement is {disagreement.lower()}. "
-            "The trained fusion output is retained in advanced model details for comparison with the overall evidence score."
+            "The final fusion probability comes directly from the three-stream model and is independent of the displayed modality probabilities."
         ),
         "overall_interpretation": f"The three learned streams classified this video as {final_verdict}. Blink and lip-sync checks are supplementary and do not contribute to the final score or verdict.",
         "semantic_context": {
@@ -338,7 +340,19 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
     analyzed_at: ISO-8601 timestamp string server.py generated at the
         time the request was handled.
     """
-    if not isinstance(result, dict) or not result.get("evidence"):
+    if not isinstance(result, dict):
+        raise InferenceFailedError(
+            "Inference returned an incomplete result.",
+            details="The backend did not return the required scoring fields.",
+        )
+    final_probability = result.get("final_fake_probability")
+    if (isinstance(final_probability, bool) or not isinstance(final_probability, Real)
+            or not math.isfinite(final_probability) or not 0 <= final_probability <= 1):
+        raise InferenceFailedError(
+            "Inference returned an invalid final fake probability.",
+            details="The final fusion probability must be a finite number between 0 and 1.",
+        )
+    if not result.get("evidence"):
         raise InferenceFailedError(
             "Inference returned an incomplete result.",
             details="The backend did not return the required scoring fields.",
@@ -348,23 +362,6 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
 
     audio_available = result.get("audio_fake_probability") is not None
     audio_missing_reason = (result.get("_audio_evidence") or {}).get("reason", "No audio stream detected")
-    feature_health = result.get("_feature_health", {})
-
-    def learned_reliability(name):
-        health = feature_health.get(name) or {}
-        if health.get("valid") is True:
-            return 1.0
-        if health.get("valid") is False:
-            return 0.0
-        return 1.0
-
-    learned_scores = {
-        "visual": result.get("visual_fake_probability"),
-        "audio": result.get("audio_fake_probability"),
-        "semantic": result.get("semantic_fake_probability"),
-    }
-    overall_fake_likelihood = aggregate_learned_fake_probabilities(learned_scores, feature_health)
-
     modalities = {
         "visual": {
             "label": MODALITY_LABELS["visual"],
@@ -480,8 +477,8 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
         "processing_time_seconds": round(processing_time_seconds, 3),
         "final_verdict": "LIKELY_DEEPFAKE" if result["prediction"] == "DEEPFAKE" else "LIKELY_REAL",
         "prediction": result["prediction"],
-        "final_fake_probability": result["final_fake_probability"],
-        "overall_fake_likelihood": result["final_fake_probability"],
+        "final_fake_probability": final_probability,
+        "overall_fake_likelihood": final_probability,
         "final_real_probability": result["final_real_probability"],
         "decision_threshold": result.get("decision_threshold"),
         "model_confidence_note": MODEL_CONFIDENCE_NOTE,
