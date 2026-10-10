@@ -23,13 +23,13 @@ import torch
 @torch.no_grad()
 def modality_contributions(model, inputs, modality_names):
     """
-    model: a FusionModel or EnhancedFusionModel instance, already
-        .eval()'d, whose forward(*inputs) returns (logits,
+    model: the active three-stream FusionModel, already .eval()'d,
+        whose forward(*inputs) returns (logits,
         attention_weights).
     inputs: list/tuple of tensors, one per modality in the exact order
         forward() expects, each shaped (1, dim) - batch size 1.
     modality_names: names matching `inputs`' order, e.g.
-        attention_utils.MODALITY_ORDER_3 / MODALITY_ORDER_5.
+        visual/audio/semantic order.
 
     Returns:
         {
@@ -43,8 +43,8 @@ def modality_contributions(model, inputs, modality_names):
     INCREASED the fake probability (its real input was pushing toward
     real).
     """
-    if len(inputs) != len(modality_names):
-        raise ValueError("inputs and modality_names must be the same length")
+    if len(inputs) != 3 or list(modality_names) != ["visual", "audio", "semantic"]:
+        raise ValueError("Contribution diagnostics support visual/audio/semantic inputs only.")
 
     model.eval()
 

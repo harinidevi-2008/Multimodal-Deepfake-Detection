@@ -12,8 +12,6 @@ component:
      classifiers/evaluate_classifier.py's evaluate()
   B. 3-modal learned fusion (visual+audio+semantic) -
      fusion/evaluate_fusion.py's evaluate()
-  C. 5-modal learned fusion (visual+audio+semantic+blink+lipsync) -
-     fusion/evaluate_enhanced_fusion.py's evaluate()
   D. Rule-based behavioral signals (blink, lip-sync) -
      fusion/evaluate_blink_lipsync.py's evaluate_blink()/evaluate_lipsync()
      - NOT learned probabilities, reported with their own fixed
@@ -36,15 +34,12 @@ sys.path.insert(0, str(REPO_ROOT / "classifiers"))
 from env_defaults import (  # noqa: E402
     DEFAULT_AUDIO_ROOT,
     DEFAULT_BLINK_ROOT,
-    DEFAULT_ENHANCED_FUSION_WEIGHTS,
     DEFAULT_FUSION_WEIGHTS,
     DEFAULT_LIPSYNC_ROOT,
     DEFAULT_SEMANTIC_ROOT,
     DEFAULT_VISUAL_ROOT,
 )
-from feature_normalization import DEFAULT_NORMALIZATION_PATH  # noqa: E402
 from evaluate_fusion import evaluate as evaluate_fusion  # noqa: E402
-from evaluate_enhanced_fusion import evaluate as evaluate_enhanced_fusion  # noqa: E402
 from evaluate_classifier import evaluate as evaluate_classifier  # noqa: E402
 from evaluate_blink_lipsync import evaluate_blink, evaluate_lipsync  # noqa: E402
 
@@ -58,11 +53,6 @@ def main():
     parser.add_argument("--lipsync-root", default=DEFAULT_LIPSYNC_ROOT)
     parser.add_argument("--classifiers-dir", default=str(REPO_ROOT / "classifiers"))
     parser.add_argument("--fusion-weights", default=DEFAULT_FUSION_WEIGHTS)
-    parser.add_argument("--enhanced-fusion-weights", default=DEFAULT_ENHANCED_FUSION_WEIGHTS)
-    parser.add_argument("--normalization-path", default=str(DEFAULT_NORMALIZATION_PATH),
-                         help="Forwarded to evaluate_enhanced_fusion(). Pass --no-normalization to skip it "
-                              "even if the file exists.")
-    parser.add_argument("--no-normalization", action="store_true")
     parser.add_argument("--split", default="test", choices=["train", "validation", "test", "all"])
     parser.add_argument("--split-path", default=None)
     parser.add_argument("--output-json", default=str(REPO_ROOT / "eval" / "results.json"))
@@ -73,7 +63,6 @@ def main():
     if args.split_path:
         split_kwargs["split_path"] = args.split_path
 
-    normalization_path = None if args.no_normalization else args.normalization_path
 
     components = {}
 
@@ -125,23 +114,6 @@ def main():
         except Exception as exc:  # noqa: BLE001 - must surface as FAILED, not crash the whole report
             components["fusion_3modal"] = {"status": "FAILED", "category": "B_3modal_fusion", "error": str(exc)}
 
-    # --- C. 5-modal learned fusion ---
-    if not Path(args.enhanced_fusion_weights).exists():
-        components["fusion_5modal"] = {"status": "NOT TRAINED", "weights_path": args.enhanced_fusion_weights,
-                                        "category": "C_5modal_fusion"}
-    else:
-        try:
-            result = evaluate_enhanced_fusion(
-                args.visual_root, args.audio_root, args.semantic_root, args.blink_root, args.lipsync_root,
-                args.enhanced_fusion_weights, normalization_path=normalization_path, **split_kwargs,
-            )
-            components["fusion_5modal"] = (
-                {"status": "SUCCESS", "category": "C_5modal_fusion", **result} if result
-                else {"status": "NO DATA", "category": "C_5modal_fusion"}
-            )
-        except Exception as exc:  # noqa: BLE001 - must surface as FAILED, not crash the whole report
-            components["fusion_5modal"] = {"status": "FAILED", "category": "C_5modal_fusion", "error": str(exc)}
-
     # --- D. Rule-based behavioral signals (NOT learned probabilities) ---
     try:
         blink_result = evaluate_blink(args.blink_root, **split_kwargs)
@@ -166,8 +138,7 @@ def main():
         "split": args.split,
         "categories": {
             "A_single_stream_classifier": "Learned single-stream classifiers (visual/audio/semantic)",
-            "B_3modal_fusion": "3-modal learned fusion (visual+audio+semantic)",
-            "C_5modal_fusion": "5-modal learned fusion (visual+audio+semantic+blink+lipsync)",
+            "B_3modal_fusion": "Three-stream learned fusion (visual+audio+semantic)",
             "D_rule_based": "Rule-based behavioral signals (blink, lip-sync) - NOT learned probabilities",
         },
         "components": components,

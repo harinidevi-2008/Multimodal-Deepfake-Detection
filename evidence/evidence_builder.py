@@ -211,12 +211,6 @@ def build_evidence_report(
     if semantic_fake_probability >= SEMANTIC_PROB_THRESHOLD:
         reasons.append("Semantic stream shows high fake probability")
 
-    if blink_result.get("blink_status") == "Abnormal":
-        reasons.append("Abnormal blinking pattern (rule-based anomaly score)")
-
-    if lipsync_result.get("lipsync_status") == "Inconsistent":
-        reasons.append("Audio-visual synchronization inconsistency (rule-based mismatch score)")
-
     if not reasons:
         # IMPORTANT: this does NOT mean the result is low-confidence. The
         # 5-modal fusion model combines all five streams through learned
@@ -227,14 +221,12 @@ def build_evidence_report(
         # is actually low-confidence is a separate, explicit check below,
         # based on the final probability itself.
         reasons.append(
-            "No individual signal exceeded its evidence threshold; the final result is based on "
-            "combined multimodal evidence."
+            "No learned stream exceeded its evidence threshold; the final result is based on the three-stream fusion output."
         )
 
-    signals = (
-        _build_learned_signals(visual_fake_probability, audio_fake_probability, semantic_fake_probability)
-        + _build_rule_signals(blink_result, lipsync_result)
-    )
+    # Only learned streams describe the final decision's consistency.
+    # Blink and lip-sync scores are returned separately as supplementary analysis.
+    signals = _build_learned_signals(visual_fake_probability, audio_fake_probability, semantic_fake_probability)
     consistency = _build_consistency(float(final_fake_probability), signals, decision_threshold)
 
     low_confidence = _is_low_confidence(final_fake_probability, decision_threshold)

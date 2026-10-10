@@ -34,6 +34,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -96,17 +97,17 @@ from full_pipeline import (  # noqa: E402
     _blink_status,
     lipsync_status_from_consistency,
     MissingCheckpointError,
+    IncompatibleCheckpointError,
     MissingFeatureFileError,
     FeatureShapeError,
     DEFAULT_THRESHOLDS_PATH,
 )
 from env_defaults import (  # noqa: E402
     DEFAULT_AUDIO_CLASSIFIER_WEIGHTS,
-    DEFAULT_ENHANCED_FUSION_WEIGHTS,
+    DEFAULT_FUSION_WEIGHTS,
     DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS,
     DEFAULT_VISUAL_CLASSIFIER_WEIGHTS,
 )
-from feature_normalization import DEFAULT_NORMALIZATION_PATH  # noqa: E402
 
 from process_video import process_video as extract_visual_feature  # noqa: E402
 from blink_analyzer import (  # noqa: E402 (visual/src/eye_blink, via full_pipeline's sys.path insert)
@@ -475,14 +476,20 @@ def _run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) 
     stage_started = time.monotonic()
     _emit_progress(progress_callback, "extracting_blink", "Analyzing eye-blink patterns")
     logger.info("[4/7] Blink analysis...")
-    blink_events, blink_timeline = _extract_blink(video_path, job)
+    try:
+        blink_events, blink_timeline = _extract_blink(video_path, job)
+    except Exception as exc:  # supplementary analyzer cannot fail the learned result
+        logger.warning("Supplementary blink analysis unavailable: %s", exc)
+        blink_events, blink_timeline = [], []
     logger.info("[4/7] Blink analysis completed in %.3fs", time.monotonic() - stage_started)
     stage_started = time.monotonic()
     _emit_progress(progress_callback, "extracting_lipsync", "Analyzing lip synchronization")
     logger.info("[5/7] Lip-sync analysis...")
-    lipsync_result = None
-    if audio_evidence.get("status") != "unavailable":
+    try:
         lipsync_result = _extract_lipsync(video_path, job)
+    except Exception as exc:  # supplementary analyzer cannot fail the learned result
+        logger.warning("Supplementary lip-sync analysis unavailable: %s", exc)
+        lipsync_result = None
     logger.info("[5/7] Lip-sync analysis completed in %.3fs", time.monotonic() - stage_started)
 
     feature_health_report = {
@@ -491,44 +498,32 @@ def _run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) 
             "visual": job.feature_path(job.visual_root),
             "audio": job.feature_path(job.audio_root),
             "semantic": job.feature_path(job.semantic_root),
-            "blink": job.feature_path(job.blink_root),
-            "lipsync": job.feature_path(job.lipsync_root),
         }.items()
     }
 
     try:
         stage_started = time.monotonic()
-        if audio_evidence.get("status") == "unavailable" or not job.feature_path(job.audio_root).is_file():
-            logger.info("No audio feature available; skipping trained five-stream fusion.")
-            result = _run_no_audio_inference(job, blink_events, video_path, lipsync_result)
-            result["frame_evidence"] = extract_evidence_frames(
-                video_path, job.evidence_dir, blink_events=blink_events
-            )
-        else:
-            _emit_progress(progress_callback, "running_classifiers", "Loading learned classifiers")
-            logger.info("[6/7] Loading checkpoints...")
-            _emit_progress(progress_callback, "running_fusion", "Running five-stream fusion")
-            logger.info("[7/7] Running fusion inference...")
-            result = run_full_inference(
-                str(RELATIVE_FEATURE_PATH),
-                visual_root=str(job.visual_root),
-                audio_root=str(job.audio_root),
-                semantic_root=str(job.semantic_root),
-                blink_root=str(job.blink_root),
-                lipsync_root=str(job.lipsync_root),
-                visual_classifier_weights=str(REPO_ROOT / DEFAULT_VISUAL_CLASSIFIER_WEIGHTS),
-                audio_classifier_weights=str(REPO_ROOT / DEFAULT_AUDIO_CLASSIFIER_WEIGHTS),
-                semantic_classifier_weights=str(REPO_ROOT / DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS),
-                enhanced_fusion_weights=str(REPO_ROOT / DEFAULT_ENHANCED_FUSION_WEIGHTS),
-                normalization_path=(
-                    str(DEFAULT_NORMALIZATION_PATH) if Path(DEFAULT_NORMALIZATION_PATH).exists() else None
-                ),
-                thresholds_path=str(DEFAULT_THRESHOLDS_PATH),
-                video_path=str(video_path),
-                frame_output_dir=str(job.evidence_dir),
-                blink_events=blink_events,
-                precomputed_lipsync_result=lipsync_result,
-            )
+        _emit_progress(progress_callback, "running_classifiers", "Loading learned classifiers")
+        logger.info("[6/7] Loading checkpoints...")
+        _emit_progress(progress_callback, "running_fusion", "Combining visual, audio, and semantic results")
+        logger.info("[7/7] Running fusion inference...")
+        result = run_full_inference(
+            str(RELATIVE_FEATURE_PATH),
+            visual_root=str(job.visual_root),
+            audio_root=str(job.audio_root),
+            semantic_root=str(job.semantic_root),
+            blink_root=str(job.blink_root),
+            lipsync_root=str(job.lipsync_root),
+            visual_classifier_weights=str(REPO_ROOT / DEFAULT_VISUAL_CLASSIFIER_WEIGHTS),
+            audio_classifier_weights=str(REPO_ROOT / DEFAULT_AUDIO_CLASSIFIER_WEIGHTS),
+            semantic_classifier_weights=str(REPO_ROOT / DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS),
+            fusion_weights=str(REPO_ROOT / DEFAULT_FUSION_WEIGHTS),
+            thresholds_path=str(DEFAULT_THRESHOLDS_PATH),
+            video_path=str(video_path),
+            frame_output_dir=str(job.evidence_dir),
+            blink_events=blink_events,
+            precomputed_lipsync_result=lipsync_result,
+        )
         logger.info("[6/7] Loading checkpoints completed in %.3fs", time.monotonic() - stage_started)
         logger.info("[7/7] Running fusion inference completed in %.3fs", time.monotonic() - stage_started)
         timings = result.get("_inference_timing_seconds", {})
@@ -549,9 +544,15 @@ def _run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) 
         raise MissingCheckpointAPIError(
             "The trained models required for analysis are not available yet.",
             details=(
-                "Train the required stream classifiers and enhanced fusion model "
+                "Train the required stream classifiers and three-stream fusion model "
                 "before running real inference."
             ),
+        ) from exc
+    except IncompatibleCheckpointError as exc:
+        logger.error("Incompatible fusion checkpoint during raw-video analysis: %s", exc)
+        raise InferenceFailedError(
+            "The configured fusion checkpoint is incompatible with the active three-stream model.",
+            details="See the backend logs for checkpoint metadata or architecture details.",
         ) from exc
     except (MissingFeatureFileError, FeatureShapeError) as exc:
         # Would indicate a bug in the five extraction steps above (they
@@ -607,13 +608,48 @@ def _analysis_worker(video_path, job_id, result_queue, progress_queue):
         logger.info("Completed analysis written for IPC: %s", result_path)
         result_queue.put(("ok", str(result_path)))
     except MissingCheckpointError as exc:
-        result_queue.put(("missing_checkpoint", str(exc)))
+        result_queue.put(("missing_checkpoint", _worker_exception_payload(exc)))
     except (MissingFeatureFileError, FeatureShapeError) as exc:
-        result_queue.put(("feature_error", str(exc)))
+        result_queue.put(("feature_error", _worker_exception_payload(exc)))
     except AnalysisAPIError as exc:
-        result_queue.put(("api_error", exc.to_body()))
+        payload = _worker_exception_payload(exc)
+        payload["api_body"] = exc.to_body()
+        result_queue.put(("api_error", payload))
     except Exception as exc:  # noqa: BLE001
-        result_queue.put(("error", repr(exc)))
+        result_queue.put(("error", _worker_exception_payload(exc)))
+
+
+def _worker_exception_payload(exc):
+    """Serialize diagnostics for parent logging without sending them to clients."""
+    return {
+        "exception_type": type(exc).__name__,
+        "message": str(exc),
+        "exception_repr": repr(exc),
+        "traceback": traceback.format_exc(),
+    }
+
+
+def _log_worker_failure(status, payload):
+    # Preserve the concise diagnostic that first identified the worker error.
+    logger.error("Raw-video analysis worker failed: status=%r payload=%r", status, payload)
+    if isinstance(payload, dict):
+        logger.error(
+            "Raw-video analysis worker failed: status=%r exception_type=%s "
+            "exception_repr=%r message=%r\nWorker traceback:\n%s",
+            status,
+            payload.get("exception_type", "unknown"),
+            payload.get("exception_repr", repr(payload)),
+            payload.get("message"),
+            payload.get("traceback", "Traceback unavailable."),
+        )
+    else:
+        # Compatibility with a worker started from an older in-memory module.
+        logger.error(
+            "Raw-video analysis worker failed: status=%r exception_repr=%r\n"
+            "Worker traceback unavailable.",
+            status,
+            repr(payload),
+        )
 
 
 def _to_ipc_native(value):
@@ -636,7 +672,7 @@ def _missing_checkpoint_paths():
         DEFAULT_VISUAL_CLASSIFIER_WEIGHTS,
         DEFAULT_AUDIO_CLASSIFIER_WEIGHTS,
         DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS,
-        DEFAULT_ENHANCED_FUSION_WEIGHTS,
+        DEFAULT_FUSION_WEIGHTS,
     )
     return [path for path in paths if not (REPO_ROOT / path).is_file()]
 
@@ -646,7 +682,10 @@ def run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) -
     if missing:
         logger.error("Required checkpoints missing: %s", missing)
         raise MissingCheckpointAPIError(
-            "Required trained model checkpoint not found.", details=missing
+            "Required trained model checkpoint not found.",
+            details=(
+                "See the backend server logs for the missing checkpoint paths."
+            ),
         )
 
     context = multiprocessing.get_context("spawn")
@@ -670,7 +709,13 @@ def run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) -
             except queue.Empty:
                 break
     if process.is_alive():
-        logger.error("Raw-video analysis timed out after %ss; terminating worker", ANALYSIS_TIMEOUT_SECONDS)
+        logger.error(
+            "Raw-video analysis worker failed: status=%r exception_repr=%r "
+            "worker_exit_code=%r; traceback unavailable because the timed-out worker is being terminated.",
+            "timeout",
+            AnalysisTimeoutError("analysis worker exceeded its deadline"),
+            process.exitcode,
+        )
         process.terminate()
         process.join(5)
         (job.dir / "analysis_result.json").unlink(missing_ok=True)
@@ -682,6 +727,13 @@ def run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) -
     try:
         status, payload = result_queue.get(timeout=2)
     except queue.Empty:
+        logger.error(
+            "Raw-video analysis worker failed: status=%r exception_repr=%r "
+            "worker_exit_code=%r; worker traceback unavailable because no payload was returned.",
+            "no_result",
+            RuntimeError("worker exited without a result payload"),
+            process.exitcode,
+        )
         raise InferenceFailedError(
             "Inference failed on the backend.",
             details="The analysis worker exited without returning a result.",
@@ -701,9 +753,14 @@ def run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) -
             return envelope["result"], envelope["meta"]
         finally:
             result_path.unlink(missing_ok=True)
+    _log_worker_failure(status, payload)
     if status == "missing_checkpoint":
         raise MissingCheckpointAPIError(
-            "Required trained model checkpoint not found.", details=[payload]
+            "Required trained model checkpoint not found.",
+            details=(
+                "Train the required stream classifiers and enhanced fusion model "
+                "before running real inference."
+            ),
         )
     if status == "feature_error":
         raise InferenceFailedError(
@@ -711,8 +768,20 @@ def run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) -
             details="See the backend server logs for the full error.",
         )
     if status == "api_error":
-        error_class = API_ERROR_BY_CODE.get(payload.get("error"), InferenceFailedError)
-        raise error_class(payload.get("message", "Inference failed on the backend."), details=payload.get("details"))
+        api_body = payload.get("api_body", {}) if isinstance(payload, dict) else {}
+        error_class = API_ERROR_BY_CODE.get(api_body.get("error"), InferenceFailedError)
+        error_code = api_body.get("error")
+        # Detailed extraction exceptions can contain machine paths or raw
+        # FFmpeg output. Those details are available in the parent server log.
+        safe_details = api_body.get("details") if error_code == "corrupt_video" else (
+            "See the backend server logs for the full error."
+            if error_class.status_code >= 500 else api_body.get("details")
+        )
+        raise error_class(
+            api_body.get("message", "Inference failed on the backend."),
+            details=safe_details,
+        )
+
     raise InferenceFailedError(
         "Inference failed on the backend.",
         details="See the backend server logs for the full error.",

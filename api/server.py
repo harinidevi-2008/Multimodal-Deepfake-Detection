@@ -37,7 +37,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("deepfake_api")
 
 # Matches audio/src/config.py's SUPPORTED_EXTENSIONS - the audio stream
-# (and therefore the whole 5-modal pipeline, which requires all five
+# (and therefore the analysis pipeline, which requires all three learned
 # features) is not verified to work on any container format beyond
 # these three, so this API doesn't advertise support for more.
 ALLOWED_EXTENSIONS = {".mp4", ".avi", ".mov"}

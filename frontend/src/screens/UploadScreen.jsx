@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from 'react'
 // Must match exactly what the backend accepts (api/server.py's
 // ALLOWED_EXTENSIONS, itself matching audio/src/config.py's
 // SUPPORTED_EXTENSIONS - the audio stream, and therefore the whole
-// 5-modal pipeline, is not verified beyond these three containers).
+// three learned streams, is not verified beyond these three containers).
 // Advertising a format here that the backend rejects would just move
 // the same error from an immediate, friendly client-side message to a
 // confusing round-trip through the real API.

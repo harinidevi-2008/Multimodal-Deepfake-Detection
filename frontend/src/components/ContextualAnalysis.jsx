@@ -1,6 +1,6 @@
 const NO_MISMATCH_MESSAGE = 'No specific mismatch was identified.'
 
-export default function ContextualAnalysis({ contextualAnalysis }) {
+export default function ContextualAnalysis({ contextualAnalysis, transcript = '', segments = [] }) {
   const detectedMismatch = contextualAnalysis?.detected_mismatch || NO_MISMATCH_MESSAGE
   const summary = contextualAnalysis?.summary || contextualAnalysis?.explanation
   const findings = contextualAnalysis?.key_findings || []
@@ -24,6 +24,15 @@ export default function ContextualAnalysis({ contextualAnalysis }) {
             {findings.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
           </ul>
         )}
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Transcript</div>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+            {transcript || 'No transcript was returned.'}
+          </p>
+          {segments.length > 0 && <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12, color: 'var(--text-muted)' }}>
+            {segments.map((segment, index) => <li key={`${segment.start}-${index}`}>{segment.start != null ? `${Number(segment.start).toFixed(1)}s: ` : ''}{segment.text}</li>)}
+          </ul>}
+        </div>
       </div>
     </div>
   )

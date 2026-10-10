@@ -25,25 +25,8 @@
       "threshold": 0.9035017490386963,
       "validation_balanced_accuracy": 0.8155727923627685,
       "validation_f1": 0.9309127584467978,
-      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_fusion_model.pt"
-    },
-    "enhanced_base": {
-      "threshold": 0.9559223651885986,
-      "validation_balanced_accuracy": 0.84881861575179,
-      "validation_f1": 0.8909952606635071,
-      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_enhanced_fusion_model.pt"
-    },
-    "enhanced_attention": {
-      "threshold": 0.9714009761810303,
-      "validation_balanced_accuracy": 0.8435799522673031,
-      "validation_f1": 0.8904686677198526,
-      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_enhanced_fusion_model_attention.pt"
-    },
-    "enhanced_gated": {
-      "threshold": 0.9830573201179504,
-      "validation_balanced_accuracy": 0.8359427207637231,
-      "validation_f1": 0.8810408921933085,
-      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_enhanced_fusion_model_gated.pt"
+      "weights": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\fusion\\best_fusion_model.pt",
+      "checkpoint_sha256": "E95C7707900953390A00213BCFD4B20537F13EDE9DC4E1CEE3FC8695ED1507BF"
     }
   }
 }

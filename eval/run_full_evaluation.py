@@ -1,11 +1,11 @@
 """
-Runs every evaluation script in sequence and prints one consolidated
-report: visual/audio/semantic classifiers, original fusion, enhanced
-fusion, and the rule-based blink/lip-sync scores.
+Runs each active evaluation script and prints a consolidated report:
+visual/audio/semantic classifiers, three-stream fusion, and separate
+rule-based blink/lip-sync scores.
 
 This is an orchestrator, not a reimplementation - it calls each
 existing script (classifiers/evaluate_classifier.py,
-fusion/evaluate_fusion.py, fusion/evaluate_enhanced_fusion.py,
+fusion/evaluate_fusion.py,
 fusion/evaluate_blink_lipsync.py) as a subprocess and streams their
 output, so there's exactly one place each metric is actually computed.
 
@@ -13,7 +13,7 @@ Honest status per component (see run()'s docstring): "NOT TRAINED"
 (no checkpoint exists - never even attempted, distinct from a real
 failure), "NO DATA" (the sub-script itself reported zero aligned
 samples for the requested split and exited non-zero for that reason -
-evaluate_fusion.py / evaluate_enhanced_fusion.py / evaluate_classifier.py
+evaluate_fusion.py / evaluate_classifier.py
 all now sys.exit(1) on this instead of silently returning success),
 "FAILED" (an actual crash/exception), or "SUCCESS". A final summary
 table lists every component's status so nothing gets silently reported
@@ -33,7 +33,6 @@ sys.path.insert(0, str(REPO_ROOT / "fusion"))
 from env_defaults import (  # noqa: E402
     DEFAULT_AUDIO_ROOT,
     DEFAULT_BLINK_ROOT,
-    DEFAULT_ENHANCED_FUSION_WEIGHTS,
     DEFAULT_FUSION_WEIGHTS,
     DEFAULT_LIPSYNC_ROOT,
     DEFAULT_SEMANTIC_ROOT,
@@ -105,16 +104,12 @@ def main():
     parser.add_argument("--lipsync-root", default=DEFAULT_LIPSYNC_ROOT)
     parser.add_argument("--classifiers-dir", default=str(REPO_ROOT / "classifiers"))
     parser.add_argument("--fusion-weights", default=DEFAULT_FUSION_WEIGHTS)
-    parser.add_argument("--enhanced-fusion-weights", default=DEFAULT_ENHANCED_FUSION_WEIGHTS)
     parser.add_argument("--split", default="test", choices=["train", "validation", "test", "all"],
                          help="Forwarded to every sub-script that supports --split. Defaults to 'test' - "
                               "the held-out set. 'all' is NOT a final metric, debugging only.")
     parser.add_argument("--split-path", default=None,
                          help="Path to data_split.json. Omit to use each sub-script's own default "
                               "(fusion/data_split.json).")
-    parser.add_argument("--normalization-path", default=None,
-                         help="Forwarded to evaluate_enhanced_fusion.py. Omit to use its own default "
-                              "(fusion/feature_normalization.json if present, else raw features).")
     args = parser.parse_args()
 
     # Resolve every filesystem-path argument against REPO_ROOT before
@@ -128,9 +123,7 @@ def main():
     args.lipsync_root = resolve_path(args.lipsync_root)
     args.classifiers_dir = resolve_path(args.classifiers_dir)
     args.fusion_weights = resolve_path(args.fusion_weights)
-    args.enhanced_fusion_weights = resolve_path(args.enhanced_fusion_weights)
     args.split_path = resolve_path(args.split_path)
-    args.normalization_path = resolve_path(args.normalization_path)
 
     if args.split == "all":
         print("WARNING: --split all evaluates on every sample regardless of train/val/test membership. "
@@ -171,22 +164,6 @@ def main():
         ] + split_flags,
         cwd=REPO_ROOT / "fusion",
         weights_path=args.fusion_weights,
-    )
-
-    enhanced_fusion_cmd = [
-        py, str(REPO_ROOT / "fusion" / "evaluate_enhanced_fusion.py"),
-        "--visual-root", args.visual_root, "--audio-root", args.audio_root,
-        "--semantic-root", args.semantic_root, "--blink-root", args.blink_root,
-        "--lipsync-root", args.lipsync_root, "--weights", args.enhanced_fusion_weights,
-    ] + split_flags
-    if args.normalization_path:
-        enhanced_fusion_cmd += ["--normalization-path", args.normalization_path]
-
-    statuses["enhanced fusion (5-modal)"] = run(
-        "ENHANCED FUSION (5-modality)",
-        enhanced_fusion_cmd,
-        cwd=REPO_ROOT / "fusion",
-        weights_path=args.enhanced_fusion_weights,
     )
 
     statuses["blink/lip-sync (rule-based)"] = run(

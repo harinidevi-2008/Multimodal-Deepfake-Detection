@@ -73,46 +73,10 @@ function buildScenario({ seed, verdict }) {
   const blink_anomaly_score = clamp01((isFake ? 0.74 : 0.18) + jitter())
   const lip_sync_mismatch_score = clamp01((isFake ? 0.69 : 0.15) + jitter())
 
-  const final_fake_probability = clamp01(
-    0.38 * visual_fake_probability +
-      0.24 * audio_fake_probability +
-      0.14 * semantic_fake_probability +
-      0.13 * blink_anomaly_score +
-      0.11 * lip_sync_mismatch_score
-  )
+  // Illustrative fixture value; real results use the backend fusion output.
+  const final_fake_probability = isFake ? 0.72 : 0.12
   const final_real_probability = 1 - final_fake_probability
   const low_confidence = Math.abs(final_fake_probability - 0.5) < 0.08
-
-  // ---- descriptive attention weights (non-causal) ----
-  const rawAttn = {
-    visual: 0.3 + rand() * 0.15,
-    audio: 0.18 + rand() * 0.12,
-    semantic: 0.12 + rand() * 0.1,
-    eye_blink: 0.12 + rand() * 0.1,
-    lip_sync: 0.14 + rand() * 0.1
-  }
-  const attnSum = Object.values(rawAttn).reduce((a, b) => a + b, 0)
-  const attention_summary = {
-    weights: Object.fromEntries(
-      Object.entries(rawAttn).map(([k, v]) => [k, +(v / attnSum).toFixed(3)])
-    ),
-    note:
-      "Descriptive cross-attention weights from the fusion model's attention layer. These describe where the model attended, not a causal or verified measure of importance — see modality_contributions for the ablation-based estimate."
-  }
-
-  // ---- ablation-based modality contributions (ΔP(fake) when zeroed) ----
-  const contrib = {
-    visual: isFake ? 0.24 + rand() * 0.05 : 0.05 + rand() * 0.03,
-    audio: isFake ? 0.13 + rand() * 0.04 : 0.04 + rand() * 0.03,
-    semantic: isFake ? 0.07 + rand() * 0.03 : 0.03 + rand() * 0.02,
-    eye_blink: isFake ? 0.11 + rand() * 0.04 : 0.02 + rand() * 0.02,
-    lip_sync: isFake ? 0.1 + rand() * 0.04 : 0.02 + rand() * 0.02
-  }
-  const modality_contributions = {
-    deltas: Object.fromEntries(Object.entries(contrib).map(([k, v]) => [k, +v.toFixed(3)])),
-    note:
-      "Ablation-based: each value is the drop in the final fake probability when that modality's input is zeroed out. Zeroing a stream is not the same as the model having 'never observed' it — treat as a heuristic, not ground truth attribution."
-  }
 
   // ---- evidence: frames ----
   const blinkEventFrames = isFake ? [42, 118, 267] : [55, 201]
@@ -159,7 +123,8 @@ function buildScenario({ seed, verdict }) {
   const windowSeconds = 0.8
   const windowCount = Math.floor(durationSeconds / windowSeconds)
   const mismatchHotspots = isFake ? [4, 5, 6, 12, 13] : []
-  const lip_sync_window_evidence = Array.from({ length: windowCount }, (_, i) => {
+  const lip_sync_window_evidence = [] /* fixtures do not invent localized evidence */
+  /* Array.from({ length: windowCount }, (_, i) => {
     const hot = mismatchHotspots.includes(i)
     const scoreBase = hot ? 0.62 : isFake ? 0.32 : 0.14
     return {
@@ -167,7 +132,7 @@ function buildScenario({ seed, verdict }) {
       window_end_seconds: +((i + 1) * windowSeconds).toFixed(2),
       mismatch_score: clamp01(scoreBase + (rand() - 0.5) * 0.12)
     }
-  })
+  }) */
 
   // ---- evidence: blink timeline (EAR = eye-aspect-ratio proxy) ----
   const blinkSamples = Math.round(durationSeconds * 10) // 10Hz
@@ -185,19 +150,7 @@ function buildScenario({ seed, verdict }) {
     })
   }
 
-  const contextual_analysis = isFake
-    ? {
-        detected_mismatch:
-          'Lip movements do not consistently track the audio track between roughly 3.2s and 5.6s, and again near 9.6s–10.4s.',
-        explanation:
-          'The lip-sync analyzer found sustained low correlation between mouth-shape motion and the audio envelope in these windows, coinciding with two of the three irregular blink events. Individually, none of these signals is conclusive — together, the fusion model weighted them as the strongest evidence toward the deepfake verdict.'
-      }
-    : {
-        detected_mismatch: 'No sustained lip-sync or blink-pattern anomalies were detected.',
-        explanation:
-          'Lip movement stayed correlated with the audio track throughout, and blink timing and duration fell within the expected range. Visual, audio, and semantic streams were all classified with low fake probability.'
-      }
-
+  const safeContextualAnalysis = { detected_mismatch: null, explanation: 'No specific contextual mismatch was returned.' }
   return {
     video_filename: isFake ? 'clip_0417_interview.mp4' : 'clip_0203_statement.mp4',
     video_duration_seconds: durationSeconds,
@@ -205,6 +158,7 @@ function buildScenario({ seed, verdict }) {
     processing_time_seconds: isFake ? 9.4 : 7.1,
     final_verdict: verdict,
     final_fake_probability: +final_fake_probability.toFixed(3),
+    overall_fake_likelihood: +final_fake_probability.toFixed(3),
     final_real_probability: +final_real_probability.toFixed(3),
     low_confidence,
     model_confidence_note:
@@ -238,15 +192,17 @@ function buildScenario({ seed, verdict }) {
         status: lip_sync_mismatch_score > 0.5 ? 'Inconsistent' : 'Consistent'
       }
     },
-    attention_summary,
-    modality_contributions,
+    decision_threshold: 0.5,
+    supplementary_consistency: { contributes_to_final_result: false },
+    transcript: '',
+    transcript_segments: [],
     evidence: {
       frames,
       audio_waveform,
       lip_sync_window_evidence,
       blink_timeline
     },
-    contextual_analysis
+    contextual_analysis: safeContextualAnalysis
   }
 }
 

@@ -46,7 +46,8 @@ export const MODALITY_META = {
   }
 }
 
-export const MODALITY_ORDER = ['visual', 'audio', 'semantic', 'eye_blink', 'lip_sync']
+export const MODALITY_ORDER = ['visual', 'audio', 'semantic']
+export const SUPPLEMENTARY_ORDER = ['eye_blink', 'lip_sync']
 
 export const RULE_BASED_CAVEAT =
   'Blink and lip-sync are supporting consistency cues, not learned fake probabilities.'

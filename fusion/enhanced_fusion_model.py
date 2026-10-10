@@ -1,5 +1,5 @@
 """
-Enhanced fusion model: extends the original 3-modality FusionModel to
+Legacy five-stream model: extends the original 3-modality FusionModel to
 also attend over eye-blink and lip-sync evidence.
 
 This is a NEW class, not a modification of FusionModel in
@@ -18,6 +18,10 @@ deep embeddings:
     lipsync_dim -> 2  ([sync_score, mismatch_score])
 
 which is exactly what visual/src/blink_lipsync_precompute.py saves.
+
+This model is retained only for old checkpoint inspection and its legacy
+regression tests. The production API and active train/evaluate aliases use
+fusion_model.FusionModel with visual, audio, and semantic inputs only.
 """
 
 import torch

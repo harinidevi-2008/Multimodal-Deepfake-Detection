@@ -1,7 +1,7 @@
 # Multimodal Deepfake Detection
 
 A multimodal deepfake detection application: a Python/FastAPI backend that runs a real
-five-stream (visual / audio / semantic / eye-blink / lip-sync) analysis pipeline over an
+three-stream learned (visual / audio / semantic) analysis pipeline over an
 uploaded video, and a React frontend that displays the result.
 
 **Integration status:** the application is fully wired end to end — upload a video in the
@@ -15,7 +15,7 @@ production-accurate detector.
 
 - [Architecture](#architecture)
 - [Project layout](#project-layout)
-- [The five modalities](#the-five-modalities)
+- [The three learned streams and supplementary checks](#the-three-learned-streams)
 - [Fusion](#fusion)
 - [Evidence](#evidence)
 - [API](#api)
@@ -56,7 +56,7 @@ directly. None of that code was rewritten or duplicated to build this integratio
 Multimodal-Deepfake-Detection/
 ├── api/                    FastAPI adapter layer (new, built for this integration)
 │   ├── server.py           routes: GET /api/health, POST /api/analyze, GET /api/evidence/...
-│   ├── pipeline_adapter.py raw-video -> five feature files -> run_full_inference()
+│   ├── pipeline_adapter.py raw-video -> learned features -> run_full_inference()
 │   ├── serializer.py       pipeline output -> frontend response contract
 │   ├── errors.py           structured error types + FastAPI exception handlers
 │   ├── jobs.py             per-request job directories (runtime/jobs/<job_id>/...)
@@ -75,7 +75,7 @@ Multimodal-Deepfake-Detection/
 ├── audio/                  Wav2Vec2 audio feature extraction
 ├── semantic/                Whisper transcription + Sentence-BERT embedding
 ├── classifiers/            per-modality SingleStreamClassifier
-├── fusion/                 EnhancedFusionModel, attention/contribution utilities,
+├── fusion/                 three-stream FusionModel and training/evaluation utilities,
 │                            feature normalization, and the ONLY checkpoint shipped
 │                            with this repo (fusion/best_fusion_model.pt — see below)
 ├── evidence/               plain-language evidence report + frame-selection logic
@@ -92,7 +92,7 @@ Nothing under `visual/`, `audio/`, `semantic/`, `fusion/`, `classifiers/`, `evid
 `inference/`, or `eval/` was modified for this integration — only `api/` was added, and
 `frontend/` is the existing UI unchanged.
 
-## The five modalities
+## The three learned streams and supplementary checks
 
 | Modality | Kind | What the frontend shows |
 |---|---|---|
@@ -109,28 +109,7 @@ This distinction is enforced in `api/serializer.py` and mirrored in the frontend
 
 ## Fusion
 
-`fusion/enhanced_fusion_model.py`'s `EnhancedFusionModel` is the documented fusion block.
-Five vectors enter it, in this order: visual (1280-d), audio (768-d), semantic (384-d),
-blink (4-d) and lip-sync (2-d). Each goes through its own `Linear -> LayerNorm -> ReLU`
-projection into a shared 256-d space, giving five tokens. The tokens pass through one
-8-head `nn.MultiheadAttention` layer (self-attention over the five tokens), a residual
-connection and a `LayerNorm`, then mean pooling over the tokens, then a
-`Linear(256,128) -> ReLU -> Dropout(0.2) -> Linear(128,2)` head.
-`fusion/fusion_model.py`'s `FusionModel` is the same block with the first three tokens only.
-
-The reliability-gated variant that was added for Innovation Day has been removed from this
-branch (see `RESTORATION_CHANGELOG.md`). Checkpoints saved while that code existed still
-load, because the unused gate parameters are dropped by `load_enhanced_state_dict`. A
-checkpoint whose `*.model_meta.json` says `gated` is refused.
-
-The model output produces `final_fake_probability` / `final_real_probability`. The
-prediction uses the validation-calibrated threshold stored in `eval/results/thresholds.json`
-for the checkpoint in use (0.5 when no entry exists). This calibration step was added after
-the original methodology was written and is kept; it changes only the REAL/DEEPFAKE cut-off,
-never the probability.
-
-`attention_summary` (descriptive, non-causal) and `modality_contributions` (ablation-based)
-come straight from `fusion/attention_utils.py` and `fusion/modality_contribution.py`.
+`fusion/fusion_model.py` projects visual, audio, and semantic features into a shared 256-dimensional space, applies three-token cross-attention, then classifies the pooled representation. Its softmax output supplies the final likelihood; blink and lip-sync checks are supplementary and never enter fusion. The shipped checkpoint has strict three-stream metadata and matching threshold provenance.
 
 ## Selected datasets
 
@@ -177,7 +156,7 @@ No model is loaded for this check — it's a plain liveness probe.
 
 `multipart/form-data`, field name `video`. Accepts `.mp4`, `.avi`, `.mov` (matching
 `audio/src/config.py`'s own `SUPPORTED_EXTENSIONS` — the audio stream, and therefore the
-whole 5-modal pipeline, is not verified beyond these three containers), up to 500 MB.
+whole three-stream pipeline, is not verified beyond these three containers), up to 500 MB.
 
 Success: `200 OK` with the response shape below. Failure: a non-2xx status with
 `{"error", "message", "details"}` — see `frontend/API_CONTRACT.md` for the full list of
@@ -202,12 +181,10 @@ Success: `200 OK` with the response shape below. Failure: a non-2xx status with
     "eye_blink": { "label": "Eye Blink", "kind": "rule_based_score", "anomaly_score": 0.75, "status": "Irregular" },
     "lip_sync":  { "label": "Lip Sync",  "kind": "rule_based_score", "mismatch_score": 0.67, "status": "Inconsistent" }
   },
-  "attention_summary": { "weights": { "...": 0.0 }, "note": "..." },
-  "modality_contributions": { "deltas": { "...": 0.0 }, "note": "..." },
   "evidence": {
     "frames": [ { "frame_index": 42, "timestamp_seconds": 1.4, "url": "/api/evidence/<job_id>/<file>.jpg", "frame_selection_reason": "eye_blink_event", "detected_artifact": null } ],
-    "audio_waveform": null,
-    "lip_sync_window_evidence": [ { "window_start_seconds": 3.2, "window_end_seconds": 4.0, "mismatch_score": 0.62 } ],
+    "audio_waveform": { "status": "global_only", "localized_windows": [] },
+    "lip_sync_window_evidence": [],
     "blink_timeline": [ { "timestamp_seconds": 1.4, "ear_value": 0.09, "is_blink": true } ]
   },
   "contextual_analysis": { "detected_mismatch": "...", "explanation": "..." }
@@ -259,8 +236,7 @@ need to point at feature/checkpoint locations different from the repo-relative d
 | `DFD_VISUAL_CLASSIFIER_WEIGHTS` | `classifiers/best_visual_classifier.pt` | visual classifier checkpoint |
 | `DFD_AUDIO_CLASSIFIER_WEIGHTS` | `classifiers/best_audio_classifier.pt` | audio classifier checkpoint |
 | `DFD_SEMANTIC_CLASSIFIER_WEIGHTS` | `classifiers/best_semantic_classifier.pt` | semantic classifier checkpoint |
-| `DFD_ENHANCED_FUSION_WEIGHTS` | `fusion/best_enhanced_fusion_model_attention.pt` | 5-modal fusion checkpoint |
-| `DFD_FUSION_WEIGHTS` | `fusion/best_fusion_model.pt` | original 3-modal fusion checkpoint (the one currently shipped) |
+| `DFD_FUSION_WEIGHTS` | `fusion/best_fusion_model.pt` | three-stream fusion checkpoint |
 
 These are the actual variable names already defined in `fusion/env_defaults.py` — the API
 layer (`api/pipeline_adapter.py`) reads the same defaults, it doesn't introduce a second
@@ -325,13 +301,12 @@ Then open **http://localhost:5173**, upload a video, and click Analyze.
 **The application integration is complete. Model accuracy depends on the currently
 available trained checkpoints, which is a separate, not-yet-finished effort.**
 
-Only `fusion/best_fusion_model.pt` (the original 3-modal checkpoint) is currently shipped
-with this repo. The four checkpoints the 5-modal pipeline needs do not exist yet:
+The visual, audio, semantic, and three-stream fusion checkpoints are required:
 
 - `classifiers/best_visual_classifier.pt`
 - `classifiers/best_audio_classifier.pt`
 - `classifiers/best_semantic_classifier.pt`
-- `fusion/best_enhanced_fusion_model_attention.pt` (default; set `DFD_ENHANCED_FUSION_WEIGHTS` to use another attention checkpoint)
+- `fusion/best_fusion_model.pt`
 
 `inference/full_pipeline.py`'s `require_file()` check deliberately raises
 `MissingCheckpointError` — never a random/fabricated prediction — when any of these are

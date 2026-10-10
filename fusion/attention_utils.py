@@ -17,7 +17,6 @@ that is a heuristic, not a proof (see its own docstring).
 import numpy as np
 
 MODALITY_ORDER_3 = ["visual", "audio", "semantic"]
-MODALITY_ORDER_5 = ["visual", "audio", "semantic", "blink", "lipsync"]
 
 
 def summarize_attention(attention_weights, modality_order):
@@ -27,7 +26,7 @@ def summarize_attention(attention_weights, modality_order):
         forward() returns (nn.MultiheadAttention's attention weights,
         already averaged over heads by PyTorch).
     modality_order: list of N modality names in the same stacking order
-        the model used (MODALITY_ORDER_3 or MODALITY_ORDER_5).
+        the model used (the active model uses MODALITY_ORDER_3).
 
     Returns {modality_name: mean_incoming_attention}: for each
     modality, the average attention every token paid TO it (mean over

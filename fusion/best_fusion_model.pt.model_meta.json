@@ -1,0 +1,8 @@
+{
+  "model_class": "FusionModel",
+  "modalities": ["visual", "audio", "semantic"],
+  "input_dimensions": {"visual": 1280, "audio": 768, "semantic": 384},
+  "class_indices": {"real": 0, "fake": 1},
+  "architecture": "three projected tokens; cross-attention; residual LayerNorm; mean pooling; binary classifier",
+  "checkpoint_sha256": "E95C7707900953390A00213BCFD4B20537F13EDE9DC4E1CEE3FC8695ED1507BF"
+}

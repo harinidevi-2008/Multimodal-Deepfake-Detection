@@ -1,3 +1,5 @@
+import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -33,12 +35,21 @@ def load_features(visual_path, audio_path, semantic_path):
 
 
 def load_model():
-
+    checkpoint = Path(MODEL_PATH)
+    metadata_path = Path(str(checkpoint) + ".model_meta.json")
+    if not checkpoint.is_file() or not metadata_path.is_file():
+        raise FileNotFoundError(f"Three-stream fusion checkpoint and metadata are required: {checkpoint}")
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    if metadata.get("model_class") != "FusionModel" or metadata.get("modalities") != ["visual", "audio", "semantic"]:
+        raise ValueError("Checkpoint metadata does not describe three-stream FusionModel.")
+    if str(metadata.get("checkpoint_sha256", "")).casefold() != digest.casefold():
+        raise ValueError("Fusion checkpoint metadata checksum does not match the checkpoint.")
     model = FusionModel()
 
     model.load_state_dict(
         torch.load(
-            MODEL_PATH,
+            checkpoint,
             map_location="cpu"
         )
     )

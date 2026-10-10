@@ -4,10 +4,8 @@ Application-facing inference orchestration layer.
 This does NOT reimplement anything - it wires together modules that
 already exist and already work on their own:
   - classifiers/single_stream_classifier.py  (visual/audio/semantic P(fake), each its own trained model)
-  - fusion/enhanced_fusion_model.py          (final 5-modal P(fake))
-  - fusion/feature_normalization.py          (the SAME blink/lipsync normalization used in training)
-  - fusion/attention_utils.py                (descriptive, non-causal attention summary)
-  - fusion/modality_contribution.py          (ablation-based modality contribution - a heuristic, not proof)
+  - fusion/fusion_model.py                  (final three-stream P(fake))
+  - fusion/fusion_model.py                   (the active three-stream final score)
   - evidence/evidence_builder.py             (human-readable evidence reasons)
   - evidence/frame_evidence.py               (frame selection metadata - never "detected_artifact")
   - fusion/evaluate_blink_lipsync.py's BLINK_ANOMALY_THRESHOLD and
@@ -23,12 +21,12 @@ attention - the fusion model was trained end-to-end and its internal
 representations are not equivalent to, and must not be presented as,
 an independent single-stream classifier's output.
 
-SCOPE (read before wiring this into a UI): this module operates on a
-sample whose five modality features have ALREADY been precomputed to
+SCOPE: this module operates on a sample whose three required learned
+stream features have ALREADY been precomputed to
 .npy files by the existing per-stream pipelines (visual/src/,
 audio/src/, semantic/src/, visual/src/blink_lipsync_precompute.py) -
 exactly like every other inference/evaluation script in this repo
-(fusion/fusion_inference.py, fusion/enhanced_fusion_inference.py). It
+(fusion/fusion_inference.py). It
 does NOT run raw feature extraction on an arbitrary new video file:
 doing that end-to-end ("upload any video, get a verdict") requires
 invoking each stream's raw extraction step first (visual frame
@@ -57,15 +55,16 @@ explicitly in its output rather than silently omitting the key when
 no video is available.
 
 MISSING CHECKPOINTS: visual/audio/semantic classifier weights and the
-enhanced fusion model weights will not exist until real training has
-been run. require_file() below turns a missing checkpoint into a
+three-stream fusion checkpoint must be trained and supplied. require_file() turns a missing checkpoint into a
 clear, actionable RuntimeError up front (naming exactly which file is
 missing) instead of an obscure torch.load/FileNotFoundError deep in
 the pipeline. This module never silently substitutes random weights
-or falls back to the old 3-modal checkpoint for a missing 5-modal one.
+and never falls back to a checkpoint with a different architecture.
 """
 
 import json
+import logging
+import hashlib
 import sys
 import time
 from pathlib import Path
@@ -80,25 +79,12 @@ import numpy as np
 import torch
 
 from single_stream_classifier import SingleStreamClassifier  # noqa: E402
-from enhanced_fusion_model import EnhancedFusionModel  # noqa: E402
-from enhanced_fusion_model import (  # noqa: E402
-    check_checkpoint_architecture,
-    default_reliability,
-    load_enhanced_state_dict,
-)
-from feature_normalization import (  # noqa: E402
-    DEFAULT_NORMALIZATION_PATH,
-    apply_normalization,
-    check_normalization_consistency,
-    load_normalization,
-)
-from attention_utils import MODALITY_ORDER_5, summarize_attention  # noqa: E402
-from modality_contribution import modality_contributions  # noqa: E402
+from fusion_model import FusionModel  # noqa: E402
 from env_defaults import (  # noqa: E402
     DEFAULT_AUDIO_CLASSIFIER_WEIGHTS,
     DEFAULT_AUDIO_ROOT,
     DEFAULT_BLINK_ROOT,
-    DEFAULT_ENHANCED_FUSION_WEIGHTS,
+    DEFAULT_FUSION_WEIGHTS,
     DEFAULT_LIPSYNC_ROOT,
     DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS,
     DEFAULT_SEMANTIC_ROOT,
@@ -120,12 +106,32 @@ WINDOW_EVIDENCE_UNAVAILABLE_NOTE = (
 
 DEFAULT_THRESHOLDS_PATH = REPO_ROOT / "eval" / "results" / "thresholds.json"
 DEFAULT_DECISION_THRESHOLD = 0.5
+REAL_CLASS_INDEX = 0
+FAKE_CLASS_INDEX = 1
+logger = logging.getLogger(__name__)
+
+
+def binary_class_probabilities(logits):
+    """Convert two-class logits to (P(real), P(fake)) in the training label order."""
+    if not isinstance(logits, torch.Tensor) or logits.ndim != 2 or logits.shape[1] != 2:
+        shape = tuple(logits.shape) if isinstance(logits, torch.Tensor) else type(logits).__name__
+        raise ValueError(f"Expected binary classifier logits with shape (batch, 2), got {shape}.")
+    if not torch.isfinite(logits).all():
+        raise ValueError("Classifier logits contain NaN or infinite values.")
+    probabilities = torch.softmax(logits, dim=1)
+    if not torch.isfinite(probabilities).all():
+        raise ValueError("Classifier softmax produced NaN or infinite probabilities.")
+    return probabilities
 
 
 class MissingCheckpointError(FileNotFoundError):
     """Raised by require_file() for a missing trained-model checkpoint -
     distinct from an arbitrary FileNotFoundError so callers can catch
     specifically "training hasn't produced this yet" if they want to."""
+
+
+class IncompatibleCheckpointError(RuntimeError):
+    """A present fusion checkpoint cannot be verified as the active model."""
 
 
 def require_file(path, description):
@@ -146,19 +152,13 @@ def require_file(path, description):
 
 
 def threshold_key_for_checkpoint(weights_path):
-    path = Path(weights_path).resolve()
-    name = path.name
-    if name == "best_enhanced_fusion_model_attention.pt":
-        return "enhanced_attention"
-    if name == "best_enhanced_fusion_model.pt":
-        return "enhanced_base"
-    return None
+    return "fusion_3_stream" if Path(weights_path).name == "best_fusion_model.pt" else None
 
 
 def load_calibrated_threshold(weights_path, thresholds_path=DEFAULT_THRESHOLDS_PATH):
     """
     Load the validation-calibrated decision threshold for the exact
-    enhanced-fusion checkpoint being used. Falls back to 0.5 only when
+    three-stream checkpoint being used. Falls back to 0.5 only when
     the threshold artifact or matching checkpoint entry is unavailable.
     """
     threshold_source = {
@@ -177,6 +177,12 @@ def load_calibrated_threshold(weights_path, thresholds_path=DEFAULT_THRESHOLDS_P
     entry = doc.get("thresholds", {}).get(key)
     if entry is None:
         return DEFAULT_DECISION_THRESHOLD, threshold_source
+    if Path(entry.get("weights", "")).name != Path(weights_path).name:
+        return DEFAULT_DECISION_THRESHOLD, threshold_source
+    if entry.get("checkpoint_sha256"):
+        digest = hashlib.sha256(Path(weights_path).read_bytes()).hexdigest()
+        if digest.casefold() != str(entry["checkpoint_sha256"]).casefold():
+            return DEFAULT_DECISION_THRESHOLD, threshold_source
     threshold_source.update({
         "criterion": doc.get("criterion"),
         "status": "loaded",
@@ -203,9 +209,7 @@ EXPECTED_FEATURE_SHAPES = {
 
 
 class MissingFeatureFileError(FileNotFoundError):
-    """Raised when a modality's precomputed feature file is missing for
-    this specific sample - distinct from MissingCheckpointError, which
-    is about trained-model weights, not per-sample feature data."""
+    """Raised when a required learned-stream feature is absent."""
 
 
 class FeatureShapeError(ValueError):
@@ -214,21 +218,12 @@ class FeatureShapeError(ValueError):
 
 
 def require_feature_file(path, modality_name):
-    """
-    Fail clearly and immediately if a modality's precomputed feature
-    file for this sample is missing, instead of letting np.load() raise
-    a bare FileNotFoundError with no indication of which of the five
-    modalities was the culprit. An incomplete sample must never be
-    allowed to silently reach a classifier or the fusion model - this
-    is the per-sample-feature analogue of require_file()'s checkpoint
-    check above.
-    """
+    """Fail clearly when a required learned-stream feature is missing."""
     p = Path(path)
     if not p.exists():
         raise MissingFeatureFileError(
             f"Missing {modality_name} feature file for this sample: {p}\n"
-            "All five modality feature files (visual/audio/semantic/blink/lipsync) must exist "
-            "for this sample before it can be run through any classifier or the fusion model."
+            "Visual, audio and semantic features are required for three-stream inference."
         )
     return p
 
@@ -249,6 +244,8 @@ def load_feature_vector(path, modality_name):
         raise FeatureShapeError(
             f"{modality_name} feature at {path} has shape {vector.shape}, expected {expected_shape}."
         )
+    if not np.isfinite(vector).all():
+        raise FeatureShapeError(f"{modality_name} feature at {path} contains NaN or infinite values.")
     return vector
 
 
@@ -279,10 +276,38 @@ def load_single_stream_probability(feature, weights_path, input_dim, return_logi
 
     with torch.inference_mode():
         logits = model(torch.from_numpy(feature).unsqueeze(0))
-        prob = torch.softmax(logits, dim=1)[0, 1].item()
+        probabilities = binary_class_probabilities(logits)
+        prob = probabilities[0, FAKE_CLASS_INDEX].item()
     if return_logits:
         return prob, [float(value) for value in logits[0].tolist()]
     return prob
+
+
+def load_fusion_model(weights_path):
+    """Load only a checksum-verified three-stream checkpoint, strictly."""
+    model = FusionModel()
+    metadata_path = Path(str(weights_path) + ".model_meta.json")
+    if not metadata_path.is_file():
+        raise IncompatibleCheckpointError(f"Fusion checkpoint metadata is required: {metadata_path}")
+    try:
+        with metadata_path.open("r", encoding="utf-8") as metadata_file:
+            metadata = json.load(metadata_file)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise IncompatibleCheckpointError("Fusion checkpoint metadata is missing or invalid JSON.") from exc
+    if metadata.get("model_class") != "FusionModel" or metadata.get("modalities") != ["visual", "audio", "semantic"]:
+        raise IncompatibleCheckpointError("Fusion checkpoint metadata is not for the required three-stream model.")
+    digest = hashlib.sha256(Path(weights_path).read_bytes()).hexdigest()
+    if str(metadata.get("checkpoint_sha256", "")).casefold() != digest.casefold():
+        raise IncompatibleCheckpointError("Fusion checkpoint does not match its metadata checksum.")
+    state_dict = torch.load(weights_path, map_location="cpu")
+    if isinstance(state_dict, dict) and "state_dict" in state_dict:
+        state_dict = state_dict["state_dict"]
+    try:
+        model.load_state_dict(state_dict, strict=True)
+    except RuntimeError as exc:
+        raise IncompatibleCheckpointError("Fusion checkpoint parameters do not match FusionModel.") from exc
+    model.eval()
+    return model
 
 
 def obtain_blink_events(video_path):
@@ -315,8 +340,7 @@ def run_full_inference(
     visual_classifier_weights=DEFAULT_VISUAL_CLASSIFIER_WEIGHTS,
     audio_classifier_weights=DEFAULT_AUDIO_CLASSIFIER_WEIGHTS,
     semantic_classifier_weights=DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS,
-    enhanced_fusion_weights=DEFAULT_ENHANCED_FUSION_WEIGHTS,
-    normalization_path=DEFAULT_NORMALIZATION_PATH,
+    fusion_weights=DEFAULT_FUSION_WEIGHTS,
     thresholds_path=DEFAULT_THRESHOLDS_PATH,
     video_path=None,
     frame_output_dir=None,
@@ -351,7 +375,7 @@ def run_full_inference(
     require_file(visual_classifier_weights, "visual classifier checkpoint")
     require_file(audio_classifier_weights, "audio classifier checkpoint")
     require_file(semantic_classifier_weights, "semantic classifier checkpoint")
-    require_file(enhanced_fusion_weights, "enhanced (5-modal) fusion model checkpoint")
+    require_file(fusion_weights, "three-stream fusion model checkpoint")
 
     # Validate every modality's feature file for this sample exists and
     # has the expected shape BEFORE anything is loaded into a
@@ -360,8 +384,16 @@ def run_full_inference(
     visual_feat = load_feature_vector(Path(visual_root) / rel, "visual")
     audio_feat = load_feature_vector(Path(audio_root) / rel, "audio")
     semantic_feat = load_feature_vector(Path(semantic_root) / rel, "semantic")
-    blink_vector = load_feature_vector(Path(blink_root) / rel, "blink")
-    lipsync_vector = load_feature_vector(Path(lipsync_root) / rel, "lipsync")
+    blink_vector = None
+    lipsync_vector = None
+    try:
+        blink_vector = load_feature_vector(Path(blink_root) / rel, "blink")
+    except (FileNotFoundError, ValueError) as exc:
+        logger.warning("Supplementary blink result unavailable for %s: %s", rel.name, exc)
+    try:
+        lipsync_vector = load_feature_vector(Path(lipsync_root) / rel, "lipsync")
+    except (FileNotFoundError, ValueError) as exc:
+        logger.warning("Supplementary lip-sync result unavailable for %s: %s", rel.name, exc)
 
     classifier_started = time.monotonic()
     visual_fake_probability, visual_logits = load_single_stream_probability(
@@ -373,104 +405,61 @@ def run_full_inference(
     semantic_fake_probability, semantic_logits = load_single_stream_probability(
         semantic_feat, semantic_classifier_weights, 384, return_logits=True
     )
+    logger.info(
+        "Loaded three learned-stream checkpoints: visual=%s audio=%s semantic=%s",
+        Path(visual_classifier_weights).name,
+        Path(audio_classifier_weights).name,
+        Path(semantic_classifier_weights).name,
+    )
+    logger.info(
+        "Validated learned streams for sample=%s: visual=%s audio=%s semantic=%s",
+        rel.name,
+        visual_feat.shape,
+        audio_feat.shape,
+        semantic_feat.shape,
+    )
     classifier_inference_seconds = time.monotonic() - classifier_started
 
     # blink vector: [blink_count, blink_rate_per_min, avg_blink_duration_sec, blink_irregularity_score]
-    blink_irregularity_score = float(blink_vector[3])
-    blink_status = _blink_status(blink_irregularity_score)
-
-    # lipsync vector: [sync_score (= consistency), mismatch_score]
-    lipsync_consistency = float(lipsync_vector[0])
-    lip_sync_mismatch_score = float(lipsync_vector[1])
-    lip_sync_status = lipsync_status_from_consistency(lipsync_consistency)
-
-    normalization = None
-    normalization_used = False
-    if normalization_path is not None and Path(normalization_path).exists():
-        normalization = load_normalization(normalization_path)
-        normalization_used = True
-
-    # Detect a checkpoint trained with (or without) normalization being
-    # run here with the opposite setting - see feature_normalization.py's
-    # check_normalization_consistency() docstring. A warning, not a hard
-    # failure: an unrecognized/pre-existing checkpoint (no sidecar yet)
-    # must not block inference, but the mismatch must not be silent.
-    normalization_warning = check_normalization_consistency(enhanced_fusion_weights, normalization_used)
-    if normalization_warning:
-        if normalization_warning.startswith("[normalization MISMATCH]"):
-            # A CONFIRMED mismatch (the sidecar explicitly says one thing,
-            # this run is about to do the other) - loud enough that it
-            # cannot be mistaken for routine log output, matching
-            # evaluate_enhanced_fusion.py's banner treatment of the same
-            # condition. The result below is not to be trusted as-is.
-            banner = "!" * 70
-            print(f"\n{banner}\n{normalization_warning}\n{banner}\n")
-        else:
-            # No sidecar at all (e.g. a pre-existing checkpoint) - cannot
-            # be verified automatically, but is not a confirmed mismatch
-            # either; a plain single-line warning is enough, per the
-            # existing checkpoint-compatibility policy.
-            print(f"\nWARNING: {normalization_warning}\n")
-
-    blink_feat = blink_vector.copy()
-    lipsync_feat = lipsync_vector.copy()
-    if normalization is not None:
-        blink_feat = apply_normalization(blink_feat, normalization["blink"])
-        lipsync_feat = apply_normalization(lipsync_feat, normalization["lipsync"])
-
     tensors = [
         torch.from_numpy(x).unsqueeze(0)
-        for x in (visual_feat, audio_feat, semantic_feat, blink_feat, lipsync_feat)
+        for x in (visual_feat, audio_feat, semantic_feat)
     ]
-    fusion_input_diagnostics = {
-        "before_normalization": {
-            "visual": feature_statistics(visual_feat),
-            "audio": feature_statistics(audio_feat),
-            "semantic": feature_statistics(semantic_feat),
-            "blink": feature_statistics(blink_vector),
-            "lipsync": feature_statistics(lipsync_vector),
-        },
-        "fusion_tensors": {
-            name: {
-                **feature_statistics(feature),
-                "tensor_shape": list(tensor.shape),
-                "device": str(tensor.device),
-            }
-            for name, feature, tensor in zip(
-                MODALITY_ORDER_5,
-                (visual_feat, audio_feat, semantic_feat, blink_feat, lipsync_feat),
-                tensors,
-            )
-        },
-    }
-    reliability = default_reliability(tensors[2])
 
     fusion_started = time.monotonic()
-    check_checkpoint_architecture(enhanced_fusion_weights)
-    fusion_model = EnhancedFusionModel()
-    state_dict = torch.load(enhanced_fusion_weights, map_location="cpu")
-    try:
-        load_result, _dropped_gate_keys = load_enhanced_state_dict(fusion_model, state_dict, strict=True)
-        checkpoint_load_mode = "strict"
-    except RuntimeError:
-        if Path(enhanced_fusion_weights).name != "best_enhanced_fusion_model.pt":
-            raise
-        load_result, _dropped_gate_keys = load_enhanced_state_dict(fusion_model, state_dict, strict=False)
-        checkpoint_load_mode = "legacy_strict_false"
-    fusion_model.eval()
+    fusion_model = load_fusion_model(fusion_weights)
 
     with torch.inference_mode():
         logits, attention = fusion_model(*tensors)
-        probs = torch.softmax(logits, dim=1)
-        final_fake_probability = probs[0, 1].item()
-        final_real_probability = probs[0, 0].item()
+        probs = binary_class_probabilities(logits)
+        final_fake_probability = round(probs[0, FAKE_CLASS_INDEX].item(), 6)
+        final_real_probability = round(probs[0, REAL_CLASS_INDEX].item(), 6)
     fusion_inference_seconds = time.monotonic() - fusion_started
-    decision_threshold, threshold_source = load_calibrated_threshold(enhanced_fusion_weights, thresholds_path)
+    decision_threshold, threshold_source = load_calibrated_threshold(fusion_weights, thresholds_path)
     prediction = "DEEPFAKE" if final_fake_probability >= decision_threshold else "REAL"
 
-    attention_summary = summarize_attention(attention, MODALITY_ORDER_5)
+    logger.info(
+        "Inference scores (%s): visual logits=%s fake=%.6f; audio logits=%s fake=%.6f; "
+        "semantic logits=%s fake=%.6f; fusion checkpoint=%s architecture=%s logits=%s "
+        "P(real)=%.6f P(fake)=%.6f threshold=%.6f (%s) prediction=%s",
+        rel.name,
+        [round(value, 6) for value in visual_logits], visual_fake_probability,
+        [round(value, 6) for value in audio_logits], audio_fake_probability,
+        [round(value, 6) for value in semantic_logits], semantic_fake_probability,
+        Path(fusion_weights).name,
+        "three_stream",
+        [round(float(value), 6) for value in logits[0].cpu().tolist()],
+        final_real_probability, final_fake_probability,
+        decision_threshold, threshold_source.get("status"), prediction,
+    )
+
     evidence_started = time.monotonic()
-    contribution = modality_contributions(fusion_model, tensors, MODALITY_ORDER_5)
+
+    blink_irregularity_score = float(blink_vector[3]) if blink_vector is not None else None
+    blink_status = _blink_status(blink_irregularity_score) if blink_irregularity_score is not None else "Unavailable"
+    lipsync_consistency = float(lipsync_vector[0]) if lipsync_vector is not None else None
+    lip_sync_mismatch_score = float(lipsync_vector[1]) if lipsync_vector is not None else None
+    lip_sync_status = lipsync_status_from_consistency(lipsync_consistency) if lipsync_consistency is not None else "Unavailable"
 
     evidence = build_evidence_report(
         visual_fake_probability=visual_fake_probability,
@@ -496,9 +485,12 @@ def run_full_inference(
 
     frame_evidence = None
     if video_path is not None and frame_output_dir is not None:
-        frame_evidence = extract_evidence_frames(video_path, frame_output_dir, blink_events=blink_events)
-        if blink_events:
-            used_real_blink_events = True
+        try:
+            frame_evidence = extract_evidence_frames(video_path, frame_output_dir, blink_events=blink_events)
+            if blink_events:
+                used_real_blink_events = True
+        except Exception as exc:  # evidence failure must not invalidate fusion scores
+            logger.warning("Visual context evidence unavailable: %s", exc)
 
     # Windowed lip-sync evidence: only genuinely computable with the raw
     # video (analyze_lipsync's correlation needs the actual mouth/audio
@@ -531,64 +523,30 @@ def run_full_inference(
     evidence_generation_seconds = time.monotonic() - evidence_started
 
     return {
-        "trained_fusion_fake_probability": round(final_fake_probability, 4),
-        "final_fake_probability": round(final_fake_probability, 4),
-        "final_real_probability": round(final_real_probability, 4),
+        "final_fake_probability": final_fake_probability,
+        "final_real_probability": final_real_probability,
         "prediction": prediction,
         "visual_fake_probability": round(visual_fake_probability, 4),
         "audio_fake_probability": round(audio_fake_probability, 4),
         "semantic_fake_probability": round(semantic_fake_probability, 4),
-        "blink_anomaly_score": round(blink_irregularity_score, 4),
+        "blink_anomaly_score": round(blink_irregularity_score, 4) if blink_irregularity_score is not None else None,
         "blink_status": blink_status,
-        "lip_sync_mismatch_score": round(lip_sync_mismatch_score, 4),
+        "lip_sync_mismatch_score": round(lip_sync_mismatch_score, 4) if lip_sync_mismatch_score is not None else None,
         "lip_sync_status": lip_sync_status,
-        "attention": attention,
-        "attention_summary": attention_summary,
-        "modality_contributions": contribution,
-        "fusion_diagnostics": {
-            "raw_logits": [round(float(value), 6) for value in logits[0].cpu().tolist()],
-            "individual_classifier_logits": {
-                "visual": [round(value, 6) for value in visual_logits],
-                "audio": [round(value, 6) for value in audio_logits],
-                "semantic": [round(value, 6) for value in semantic_logits],
-            },
-            "individual_classifier_fake_probabilities": {
-                "visual": round(visual_fake_probability, 6),
-                "audio": round(audio_fake_probability, 6),
-                "semantic": round(semantic_fake_probability, 6),
-            },
-            "fusion_input_diagnostics": fusion_input_diagnostics,
-            "normalization": {
-                "applied": normalization_used,
-                "path": str(Path(normalization_path).resolve()) if normalization_used else None,
-                "fit_on_split": normalization.get("metadata", {}).get("fit_on_split") if normalization else None,
-                "modalities": ["blink", "lipsync"] if normalization_used else [],
-            },
-            "softmax_probabilities": {
-                "real": round(final_real_probability, 6),
-                "fake": round(final_fake_probability, 6),
-            },
-            "class_indices": {"real": 0, "fake": 1},
-            "decision_threshold": round(float(decision_threshold), 6),
-            "decision_threshold_source": threshold_source,
-            "predicted_class_index": 1 if prediction == "DEEPFAKE" else 0,
-            "predicted_class": prediction,
-            "modality_order": list(MODALITY_ORDER_5),
-            "fusion_architecture": "attention",
-            "checkpoint_path": str(Path(enhanced_fusion_weights).resolve()),
-            "checkpoint_load_mode": checkpoint_load_mode,
-            "checkpoint_missing_keys": list(load_result.missing_keys),
-            "checkpoint_unexpected_keys": list(load_result.unexpected_keys),
-            "modality_reliability": {
-                name: round(float(value), 6)
-                for name, value in zip(MODALITY_ORDER_5, reliability[0].cpu().tolist())
-            },
+        "supplementary_consistency": {
+            "blink": {"score": round(blink_irregularity_score, 4) if blink_irregularity_score is not None else None, "status": blink_status},
+            "lip_sync": {"mismatch_score": round(lip_sync_mismatch_score, 4) if lip_sync_mismatch_score is not None else None, "status": lip_sync_status},
+            "contributes_to_final_result": False,
         },
+        "individual_stream_probabilities": {
+            "visual": round(visual_fake_probability, 4),
+            "audio": round(audio_fake_probability, 4),
+            "semantic": round(semantic_fake_probability, 4),
+        },
+        "decision_threshold": round(float(decision_threshold), 6),
         "evidence": evidence,
         "frame_evidence": frame_evidence,
         "window_evidence": window_evidence,
-        "normalization_applied": normalization_used,
-        "normalization_warning": normalization_warning,
         "evidence_availability": evidence_availability,
         "_inference_timing_seconds": {
             "classifier_inference": classifier_inference_seconds,
@@ -603,7 +561,7 @@ def main():
     import json
 
     parser = argparse.ArgumentParser(
-        description="Run the full application-facing 5-modal inference pipeline on one precomputed sample."
+        description="Run three-stream inference on one precomputed sample."
     )
     parser.add_argument("--relative-path", required=True)
     parser.add_argument("--visual-root", default=DEFAULT_VISUAL_ROOT)
@@ -614,10 +572,8 @@ def main():
     parser.add_argument("--visual-classifier-weights", default=DEFAULT_VISUAL_CLASSIFIER_WEIGHTS)
     parser.add_argument("--audio-classifier-weights", default=DEFAULT_AUDIO_CLASSIFIER_WEIGHTS)
     parser.add_argument("--semantic-classifier-weights", default=DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS)
-    parser.add_argument("--enhanced-fusion-weights", default=DEFAULT_ENHANCED_FUSION_WEIGHTS)
-    parser.add_argument("--normalization-path", default=str(DEFAULT_NORMALIZATION_PATH))
+    parser.add_argument("--fusion-weights", default=DEFAULT_FUSION_WEIGHTS)
     parser.add_argument("--thresholds-path", default=str(DEFAULT_THRESHOLDS_PATH))
-    parser.add_argument("--no-normalization", action="store_true")
     args = parser.parse_args()
 
     result = run_full_inference(
@@ -627,12 +583,10 @@ def main():
         visual_classifier_weights=args.visual_classifier_weights,
         audio_classifier_weights=args.audio_classifier_weights,
         semantic_classifier_weights=args.semantic_classifier_weights,
-        enhanced_fusion_weights=args.enhanced_fusion_weights,
-        normalization_path=(None if args.no_normalization else args.normalization_path),
+        fusion_weights=args.fusion_weights,
         thresholds_path=args.thresholds_path,
     )
-    printable = {k: v for k, v in result.items() if k != "attention"}
-    print(json.dumps(printable, indent=2, default=str))
+    print(json.dumps(result, indent=2, default=str))
 
 
 if __name__ == "__main__":

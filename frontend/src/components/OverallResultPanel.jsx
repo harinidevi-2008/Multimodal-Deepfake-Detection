@@ -1,8 +1,9 @@
 import { toPercent } from '../utils/formatters'
 
 export default function OverallResultPanel({ result }) {
-  const value = result.overall_fake_likelihood
-  const fakePct = Number.isFinite(Number(value)) ? Number(value) : null
+  const isFake = result.final_verdict === 'LIKELY_DEEPFAKE'
+  const fakeLikelihood = result.overall_fake_likelihood ?? result.final_fake_probability
+  const hasScore = typeof fakeLikelihood === 'number' && Number.isFinite(fakeLikelihood)
 
   return (
     <div
@@ -27,9 +28,15 @@ export default function OverallResultPanel({ result }) {
         </div>
 
         <div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-          Reliability-weighted mean of available learned modality scores.
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Final fake likelihood
           </div>
+          <div style={{ fontSize: 42, lineHeight: 1.1, fontWeight: 800, color: isFake ? 'var(--danger-strong)' : 'var(--success-strong)' }}>
+            {hasScore ? toPercent(fakeLikelihood, 0) : 'Unavailable'}
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
+            This is the combined score from the visual, audio, and semantic analyses. It is a model score, not proof of a specific altered moment.
+          </p>
         </div>
       </div>
     </div>

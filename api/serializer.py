@@ -1,12 +1,8 @@
 """
 run_full_inference() result -> frontend API_CONTRACT.md shape.
 
-The ONE place field-name conversions happen (per the integration spec's
-own instruction: "write one adapter/serializer... don't scatter
-field-name conversions across React components"). Every value here is
-either read straight from the pipeline's real result dict, or a static
-explanatory string (attention/contribution "note" fields, the
-low-confidence-margin note) - nothing here is a fabricated number.
+The ONE place field-name conversions happen. Displayed scores and evidence
+come from the inference pipeline; no aggregate score is recomputed here.
 
 Naming note: run_full_inference()'s result has a top-level "evidence"
 key that is evidence/evidence_builder.py's plain-language report dict
@@ -37,60 +33,11 @@ LEARNED_MODALITY_VALIDATION_F1 = {
 }
 EVIDENCE_POWER = 4
 
-ATTENTION_NOTE = (
-    "Descriptive cross-attention weights (mean incoming attention per modality "
-    "token) - not a causal measure of importance. See fusion/attention_utils.py."
-)
-CONTRIBUTION_NOTE = (
-    "Ablation-based: each value is the drop in the final fake probability when "
-    "that modality's input is zeroed out. A heuristic sensitivity probe, not a "
-    "ground-truth attribution. See fusion/modality_contribution.py."
-)
-
-
-def aggregate_learned_fake_probabilities(scores, feature_health):
-    """Conservative validation-F1-weighted power mean of available scores."""
-    weighted_scores = []
-    for name, score in scores.items():
-        if score is None:
-            continue
-        try:
-            score = float(score)
-        except (TypeError, ValueError):
-            continue
-        if not math.isfinite(score):
-            continue
-        reliability = (feature_health.get(name) or {}).get("valid")
-        if reliability is False:
-            continue
-        weight = LEARNED_MODALITY_VALIDATION_F1[name]
-        score = min(1.0, max(0.0, score))
-        weighted_scores.append((score, weight))
-
-    weight_sum = sum(weight for _score, weight in weighted_scores)
-    if weight_sum == 0:
-        return None
-    return (
-        sum(weight * score ** EVIDENCE_POWER for score, weight in weighted_scores) / weight_sum
-    ) ** (1 / EVIDENCE_POWER)
 MODEL_CONFIDENCE_NOTE = (
-    "Model confidence reflects distance from the calibrated decision boundary - a final "
-    "fake probability within 0.15 of that threshold is flagged as low-confidence (see "
-    "evidence/evidence_builder.py's LOW_CONFIDENCE_MARGIN)."
+    "The displayed score is the fusion model's raw softmax output; it has not been calibrated "
+    "to represent empirical ground-truth likelihood. The REAL/DEEPFAKE label uses a threshold "
+    "selected on validation data. Scores within 0.15 of that threshold are flagged as low-confidence."
 )
-
-
-def _rename_modality_keys(d):
-    """attention/contribution dicts key modalities as "blink"/"lipsync"
-    (MODALITY_ORDER_5) - the frontend contract (and ModalityCard.jsx /
-    modalityMeta.js) uses "eye_blink"/"lip_sync" everywhere else. Renamed
-    only here, once, rather than in every component."""
-    out = dict(d)
-    if "blink" in out:
-        out["eye_blink"] = out.pop("blink")
-    if "lipsync" in out:
-        out["lip_sync"] = out.pop("lipsync")
-    return out
 
 
 def _build_frames(frame_evidence, fps, job_id):
@@ -296,36 +243,6 @@ def _build_contextual_analysis(result, evidence_report, lip_sync_status, blink_s
         {"modality": key, "label": name, "score": score, "reason": f"{name} produced a {1 - score:.0%} real probability."}
         for key, name, score in scores if score < 0.5
     ]
-    if blink_status != "Abnormal":
-        real_support.append({
-            "modality": "eye_blink",
-            "label": "Eye Blink",
-            "score": result["blink_anomaly_score"],
-            "reason": "Blink analysis did not identify an abnormal pattern.",
-        })
-    else:
-        fake_support.append({
-            "modality": "eye_blink",
-            "label": "Eye Blink",
-            "score": result["blink_anomaly_score"],
-            "reason": "Blink analysis classified the aggregate blink pattern as abnormal.",
-        })
-    if result.get("lip_sync_mismatch_score") is None:
-        pass
-    elif lip_sync_status != "Inconsistent":
-        real_support.append({
-            "modality": "lip_sync",
-            "label": "Lip Sync",
-            "score": result["lip_sync_mismatch_score"],
-            "reason": "Lip-sync analysis classified the aggregate synchronization pattern as consistent.",
-        })
-    else:
-        fake_support.append({
-            "modality": "lip_sync",
-            "label": "Lip Sync",
-            "score": result["lip_sync_mismatch_score"],
-            "reason": "Lip-sync analysis classified the aggregate synchronization pattern as inconsistent.",
-        })
 
     contradicting = fake_support
     aligned = real_support
@@ -349,16 +266,7 @@ def _build_contextual_analysis(result, evidence_report, lip_sync_status, blink_s
     unavailable.append("Visual artifact localization is unavailable; context frames are not proof of manipulation.")
 
     detected_mismatch = None
-    if result.get("lip_sync_mismatch_score") is None:
-        detected_mismatch = "Lip-sync analysis is unavailable because no audio feature was available."
-    elif lip_sync_status == "Inconsistent":
-        detected_mismatch = (
-            "Audio-visual synchronization inconsistency detected (rule-based lip-sync mismatch score)."
-        )
-    elif blink_status == "Abnormal":
-        detected_mismatch = "Abnormal eye-blink pattern detected (rule-based anomaly score)."
-
-    modality_explanations = _modality_explanations(result, blink_status, lip_sync_status)
+    modality_explanations = []
     return {
         "summary": (
             "Available modality evidence is mixed."
@@ -371,10 +279,6 @@ def _build_contextual_analysis(result, evidence_report, lip_sync_status, blink_s
               if result.get("audio_fake_probability") is not None
               else [f"Audio analysis: Not available. Reason: {audio_missing_reason}."]),
             f"Semantic analysis produced a {result['semantic_fake_probability']:.0%} fake probability.",
-            f"Blink analysis produced a {result['blink_anomaly_score']:.0%} anomaly score and was classified as {blink_status}.",
-            *([f"Lip-sync analysis produced a {result['lip_sync_mismatch_score']:.0%} mismatch score and was classified as {lip_sync_status}."]
-              if result.get("lip_sync_mismatch_score") is not None
-              else ["Lip-sync: Not available because audio is unavailable."]),
         ],
         "supporting_signals": aligned,
         "contradicting_signals": contradicting,
@@ -402,7 +306,7 @@ def _build_contextual_analysis(result, evidence_report, lip_sync_status, blink_s
             f"Evidence consistency is {consistency.lower()} and modality disagreement is {disagreement.lower()}. "
             "The trained fusion output is retained in advanced model details for comparison with the overall evidence score."
         ),
-        "overall_interpretation": "The displayed overall evidence score is the reliability-weighted mean of available learned modality probabilities. The trained fusion model score is shown separately.",
+        "overall_interpretation": f"The three learned streams classified this video as {final_verdict}. Blink and lip-sync checks are supplementary and do not contribute to the final score or verdict.",
         "semantic_context": {
             "language": semantic.get("language", "unknown"),
             "transcript": semantic.get("transcript", ""),
@@ -470,8 +374,7 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
             "evidence": "Global classifier signal",
             "localization": "unavailable",
             "trust": "Treat as one learned signal; it does not identify a specific visual artifact.",
-            "explanation": "The visual model detected patterns associated with manipulated content.",
-            "feature_health": result.get("_feature_health", {}).get("visual"),
+            "explanation": "The visual classifier found features associated with manipulated content, but the current pipeline cannot identify a specific visual artifact responsible for the score.",
         },
         "audio": {
             "label": MODALITY_LABELS["audio"],
@@ -481,9 +384,7 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
             "evidence": "Global classifier signal",
             "localization": "localized" if result.get("_audio_evidence", {}).get("localized_windows") else "unavailable",
             "trust": "Treat as a global learned signal unless timestamped audio windows are present.",
-            "explanation": ("The audio model detected patterns associated with manipulated speech. This score alone does not identify a specific altered section unless timestamped evidence is available."
-                            if audio_available else f"Audio analysis: Not available. Reason: {audio_missing_reason}."),
-            "feature_health": result.get("_feature_health", {}).get("audio"),
+            "explanation": "The audio classifier found characteristics associated with manipulated speech. This score alone does not identify a specific altered section unless timestamped evidence is available.",
         },
         "semantic": {
             "label": MODALITY_LABELS["semantic"],
@@ -496,8 +397,7 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
             "evidence": "Global semantic classifier signal",
             "localization": "unavailable",
             "trust": "Do not attribute manipulation to a transcript segment unless localized semantic evidence is returned.",
-            "explanation": "The semantic model detected patterns associated with manipulated/generated speech content. No specific transcript segment is localized by this score.",
-            "feature_health": result.get("_feature_health", {}).get("semantic"),
+            "explanation": "The semantic classifier found content patterns associated with its fake class. No specific transcript segment should be called manipulated unless the analysis provides localized evidence.",
         },
         "eye_blink": {
             "label": "Eye Blink",
@@ -511,9 +411,10 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
             "explanation": (
                 "The measured blink pattern crossed the configured abnormality criteria."
                 if result["blink_status"] == "Abnormal"
+                else "Blink analysis was unavailable for this video."
+                if result["blink_status"] == "Unavailable"
                 else "The measured blink pattern did not cross the configured abnormality criteria."
             ),
-            "feature_health": result.get("_feature_health", {}).get("blink"),
         },
         "lip_sync": {
             "label": "Lip Sync",
@@ -529,9 +430,10 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
                 if not audio_available else
                 "The current rule-based criteria classify the overall synchronization as inconsistent."
                 if result["lip_sync_status"] == "Inconsistent"
+                else "Lip-sync analysis was unavailable for this video."
+                if result["lip_sync_status"] == "Unavailable"
                 else "Some mouth/audio timing variation may be present, but the current rule-based criteria classify the overall synchronization as consistent."
             ),
-            "feature_health": result.get("_feature_health", {}).get("lipsync"),
         },
     }
 
@@ -546,22 +448,8 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
         evidence["audio_waveform"] = audio_evidence
     elif audio_evidence:
         evidence["audio_evidence_status"] = audio_evidence.get("status", "unavailable")
-        if audio_evidence.get("reason"):
-            evidence["audio_unavailable_reason"] = audio_evidence["reason"]
-    if result.get("_no_audio_reason"):
-        evidence["audio_evidence_status"] = "unavailable"
-        evidence["audio_unavailable_reason"] = "No audio stream detected"
-    if result.get("_semantic_metadata"):
-        evidence["semantic_context"] = {
-            "transcript": result["_semantic_metadata"].get("transcript", ""),
-            "language": result["_semantic_metadata"].get("language", "unknown"),
-            "confidence": result["_semantic_metadata"].get("confidence"),
-        }
-    # No genuine audio waveform envelope is computed anywhere in this
-    # pipeline (audio/src/audio_stream.py only ever produces the pooled
-    # 768-d Wav2Vec2 feature, never a sample-level amplitude envelope) -
-    # omit the key entirely rather than fabricate one. See API_CONTRACT.md's
-    # "omit a key rather than fabricating" instruction.
+    # The RMS envelope is genuine global playback evidence. It does not
+    # localize suspicious audio intervals and must not be described as one.
     window_evidence = _build_lip_sync_window_evidence(result.get("window_evidence"))
     if window_evidence:
         evidence["lip_sync_window_evidence"] = window_evidence
@@ -576,9 +464,13 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
              "evidence_status": "supporting_context"}
             for start, end in result["_blink_events"]
         ]
-    public_health = {
-        name: {key: value for key, value in health.items() if key != "path"}
-        for name, health in result.get("_feature_health", {}).items()
+    contextual = _build_contextual_analysis(
+        result, evidence_report, result["lip_sync_status"], result["blink_status"]
+    )
+    contextual = {
+        key: contextual[key]
+        for key in ("summary", "key_findings", "detected_mismatch", "explanation", "overall_interpretation")
+        if key in contextual
     }
 
     return {
@@ -586,39 +478,19 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
         "video_duration_seconds": meta.get("duration_seconds"),
         "analyzed_at": analyzed_at,
         "processing_time_seconds": round(processing_time_seconds, 3),
-        "overall_fake_likelihood": overall_fake_likelihood,
-        "learned_modality_reliability": {
-            name: learned_reliability(name) if score is not None else None
-            for name, score in learned_scores.items()
-        },
-        "trained_fusion_fake_probability": result.get("trained_fusion_fake_probability", result.get("final_fake_probability")),
-        "final_fake_probability": result.get("trained_fusion_fake_probability", result.get("final_fake_probability")),
-        "final_real_probability": result.get("final_real_probability"),
-        "final_verdict": None if result.get("prediction") == "UNAVAILABLE" else ("LIKELY_DEEPFAKE" if result.get("prediction") == "DEEPFAKE" else "LIKELY_REAL")
-        if result.get("prediction") in {"DEEPFAKE", "REAL"} else None,
-        "decision_threshold": (result.get("fusion_diagnostics") or {}).get("decision_threshold"),
-        "low_confidence": evidence_report.get("low_confidence"),
-        "evidence_consistency": evidence_report.get("evidence_consistency"),
-        "modality_disagreement": evidence_report.get("modality_disagreement"),
-        "review_recommended": evidence_report.get("review_recommended"),
-        "confidence_level": evidence_report.get("confidence_level"),
+        "final_verdict": "LIKELY_DEEPFAKE" if result["prediction"] == "DEEPFAKE" else "LIKELY_REAL",
+        "prediction": result["prediction"],
+        "final_fake_probability": result["final_fake_probability"],
+        "overall_fake_likelihood": result["final_fake_probability"],
+        "final_real_probability": result["final_real_probability"],
+        "decision_threshold": result.get("decision_threshold"),
         "model_confidence_note": MODEL_CONFIDENCE_NOTE,
         "modalities": modalities,
-        "attention_summary": {
-            "weights": _rename_modality_keys(result.get("attention_summary") or {}),
-            "note": ATTENTION_NOTE,
-        },
-        "modality_contributions": {
-            "deltas": _rename_modality_keys((result.get("modality_contributions") or {}).get("contributions", {})),
-            "ablated_fake_probabilities": _rename_modality_keys(
-                (result.get("modality_contributions") or {}).get("ablated_fake_probabilities", {})
-            ),
-            "note": CONTRIBUTION_NOTE,
-        },
-        "fusion_diagnostics": result.get("fusion_diagnostics"),
-        "evidence": evidence,
-        "feature_health": public_health,
-        "contextual_analysis": _build_contextual_analysis(
-            result, evidence_report, result.get("lip_sync_status", "unavailable"), result["blink_status"]
+        "supplementary_consistency": result.get(
+            "supplementary_consistency", {"contributes_to_final_result": False}
         ),
+        "evidence": evidence,
+        "transcript": result.get("_semantic_metadata", {}).get("transcript", ""),
+        "transcript_segments": result.get("_semantic_metadata", {}).get("segments", []),
+        "contextual_analysis": contextual,
     }

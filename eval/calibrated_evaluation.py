@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -26,20 +27,11 @@ from single_stream_classifier import SingleStreamClassifier  # noqa: E402
 from single_stream_dataset import SingleStreamDataset  # noqa: E402
 from fusion_dataset import FusionDataset  # noqa: E402
 from fusion_model import FusionModel  # noqa: E402
-from enhanced_fusion_dataset import EnhancedFusionDataset  # noqa: E402
-from enhanced_fusion_model import (  # noqa: E402
-    EnhancedFusionModel,
-    check_checkpoint_architecture,
-    load_enhanced_state_dict,
-)
 from env_defaults import (  # noqa: E402
     DEFAULT_AUDIO_ROOT,
-    DEFAULT_BLINK_ROOT,
-    DEFAULT_LIPSYNC_ROOT,
     DEFAULT_SEMANTIC_ROOT,
     DEFAULT_VISUAL_ROOT,
 )
-from feature_normalization import DEFAULT_NORMALIZATION_PATH, load_normalization  # noqa: E402
 from split_utils import DEFAULT_SPLIT_PATH  # noqa: E402
 
 
@@ -120,15 +112,6 @@ def probs_for_loader(model, loader, device, kind):
         elif kind == "fusion3":
             visual, audio, semantic, labels = batch
             logits, _ = model(visual.to(device), audio.to(device), semantic.to(device))
-        elif kind == "enhanced":
-            visual, audio, semantic, blink, lipsync, labels = batch
-            logits, _ = model(
-                visual.to(device),
-                audio.to(device),
-                semantic.to(device),
-                blink.to(device),
-                lipsync.to(device),
-            )
         else:
             raise ValueError(f"unknown loader kind: {kind}")
         labels_out.extend(labels.tolist())
@@ -150,6 +133,16 @@ def eval_single(name, feature_root, input_dim, weights, split_path, batch_size, 
 
 
 def eval_fusion3(name, roots, weights, split_path, batch_size, device):
+    weights = Path(weights)
+    metadata_path = Path(str(weights) + ".model_meta.json")
+    if not metadata_path.is_file():
+        raise FileNotFoundError(f"Three-stream fusion metadata is required: {metadata_path}")
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    digest = hashlib.sha256(weights.read_bytes()).hexdigest()
+    if metadata.get("model_class") != "FusionModel" or metadata.get("modalities") != ["visual", "audio", "semantic"]:
+        raise ValueError("Fusion checkpoint metadata is not for the three-stream FusionModel.")
+    if str(metadata.get("checkpoint_sha256", "")).casefold() != digest.casefold():
+        raise ValueError("Fusion checkpoint does not match its metadata checksum.")
     model = FusionModel().to(device)
     model.load_state_dict(torch.load(weights, map_location=device))
     model.eval()
@@ -162,36 +155,6 @@ def eval_fusion3(name, roots, weights, split_path, batch_size, device):
         return probs_for_loader(model, loader, device, "fusion3")
 
     return _calibrated_result(name, weights, run)
-
-
-def eval_enhanced(name, roots, weights, split_path, normalization, batch_size, device):
-    architecture = check_checkpoint_architecture(weights)
-    model = EnhancedFusionModel().to(device)
-    load_result, _dropped_gate_keys = load_enhanced_state_dict(
-        model, torch.load(weights, map_location=device), strict=False
-    )
-    model.eval()
-
-    def run(split):
-        dataset = EnhancedFusionDataset(
-            roots["visual"],
-            roots["audio"],
-            roots["semantic"],
-            roots["blink"],
-            roots["lipsync"],
-            split_path=split_path,
-            split_name=split,
-            normalization_stats=normalization,
-            cache_features=True,
-        )
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-        return probs_for_loader(model, loader, device, "enhanced")
-
-    result = _calibrated_result(name, weights, run)
-    result["architecture"] = architecture
-    result["strict_false_missing_keys"] = list(load_result.missing_keys)
-    result["strict_false_unexpected_keys"] = list(load_result.unexpected_keys)
-    return result
 
 
 def _calibrated_result(name, weights, run_split):
@@ -233,10 +196,7 @@ def main():
     parser.add_argument("--visual-root", default=DEFAULT_VISUAL_ROOT)
     parser.add_argument("--audio-root", default=DEFAULT_AUDIO_ROOT)
     parser.add_argument("--semantic-root", default=DEFAULT_SEMANTIC_ROOT)
-    parser.add_argument("--blink-root", default=DEFAULT_BLINK_ROOT)
-    parser.add_argument("--lipsync-root", default=DEFAULT_LIPSYNC_ROOT)
     parser.add_argument("--split-path", default=str(DEFAULT_SPLIT_PATH))
-    parser.add_argument("--normalization-path", default=str(DEFAULT_NORMALIZATION_PATH))
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--output-thresholds", default=str(REPO_ROOT / "eval" / "results" / "thresholds.json"))
     parser.add_argument("--output-results", default=str(REPO_ROOT / "eval" / "results" / "calibrated_results.json"))
@@ -247,18 +207,13 @@ def main():
         "visual": args.visual_root,
         "audio": args.audio_root,
         "semantic": args.semantic_root,
-        "blink": args.blink_root,
-        "lipsync": args.lipsync_root,
     }
-    normalization = load_normalization(args.normalization_path)
 
     jobs = [
         ("visual", lambda: eval_single("Visual", args.visual_root, 1280, REPO_ROOT / "classifiers" / "best_visual_classifier.pt", args.split_path, args.batch_size, device)),
         ("audio", lambda: eval_single("Audio", args.audio_root, 768, REPO_ROOT / "classifiers" / "best_audio_classifier.pt", args.split_path, args.batch_size, device)),
         ("semantic", lambda: eval_single("Semantic", args.semantic_root, 384, REPO_ROOT / "classifiers" / "best_semantic_classifier.pt", args.split_path, args.batch_size, device)),
         ("fusion_3_stream", lambda: eval_fusion3("3-stream Fusion", roots, REPO_ROOT / "fusion" / "best_fusion_model.pt", args.split_path, args.batch_size, device)),
-        ("enhanced_base", lambda: eval_enhanced("5-stream Enhanced Fusion", roots, REPO_ROOT / "fusion" / "best_enhanced_fusion_model.pt", args.split_path, normalization, args.batch_size, device)),
-        ("enhanced_attention", lambda: eval_enhanced("5-stream Enhanced Fusion Attention", roots, REPO_ROOT / "fusion" / "best_enhanced_fusion_model_attention.pt", args.split_path, normalization, args.batch_size, device)),
     ]
 
     results = {}
@@ -277,6 +232,7 @@ def main():
                 "validation_balanced_accuracy": value["threshold"]["validation_balanced_accuracy"],
                 "validation_f1": value["threshold"]["validation_f1"],
                 "weights": value["weights"],
+                **({"checkpoint_sha256": hashlib.sha256(Path(value["weights"]).read_bytes()).hexdigest()} if key == "fusion_3_stream" else {}),
             }
             for key, value in results.items()
         },

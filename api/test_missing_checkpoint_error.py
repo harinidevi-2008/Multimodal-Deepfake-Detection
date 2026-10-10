@@ -51,14 +51,14 @@ def check_full_pipeline_raises_on_real_checkpoints():
         DEFAULT_VISUAL_CLASSIFIER_WEIGHTS,
         DEFAULT_AUDIO_CLASSIFIER_WEIGHTS,
         DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS,
-        DEFAULT_ENHANCED_FUSION_WEIGHTS,
+        DEFAULT_FUSION_WEIGHTS,
     )
 
     for name, rel in [
         ("visual classifier", DEFAULT_VISUAL_CLASSIFIER_WEIGHTS),
         ("audio classifier", DEFAULT_AUDIO_CLASSIFIER_WEIGHTS),
         ("semantic classifier", DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS),
-        ("enhanced fusion", DEFAULT_ENHANCED_FUSION_WEIGHTS),
+        ("three-stream fusion", DEFAULT_FUSION_WEIGHTS),
     ]:
         if (REPO_ROOT / rel).exists():
             print(f"[SKIP] {name} checkpoint is now present - training has evidently "
@@ -72,7 +72,7 @@ def check_full_pipeline_raises_on_real_checkpoints():
             visual_classifier_weights=str(REPO_ROOT / DEFAULT_VISUAL_CLASSIFIER_WEIGHTS),
             audio_classifier_weights=str(REPO_ROOT / DEFAULT_AUDIO_CLASSIFIER_WEIGHTS),
             semantic_classifier_weights=str(REPO_ROOT / DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS),
-            enhanced_fusion_weights=str(REPO_ROOT / DEFAULT_ENHANCED_FUSION_WEIGHTS),
+            fusion_weights=str(REPO_ROOT / DEFAULT_FUSION_WEIGHTS),
         )
     except MissingCheckpointError as exc:
         print("[PASS] run_full_inference() raises MissingCheckpointError against the real, "
@@ -158,8 +158,11 @@ def check_adapter_preflights_checkpoints():
         try:
             pipeline_adapter.run_raw_video_analysis(Path("does-not-exist.mp4"), job)
         except MissingCheckpointAPIError as exc:
-            if exc.details != ["classifiers/best_visual_classifier.pt"]:
-                print(f"[FAIL] preflight details were not preserved: {exc.details!r}")
+            if "classifiers/best_visual_classifier.pt" in str(exc.details):
+                print(f"[FAIL] preflight exposed a server-side checkpoint path: {exc.details!r}")
+                return False
+            if not exc.details:
+                print("[FAIL] preflight did not provide a path-free diagnostic")
                 return False
         else:
             print("[FAIL] adapter did not reject missing checkpoints before extraction")
