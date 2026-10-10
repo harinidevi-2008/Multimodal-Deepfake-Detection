@@ -34,7 +34,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from torch.utils.data import DataLoader
 
 from enhanced_fusion_dataset import EnhancedFusionDataset
-from enhanced_fusion_model import EnhancedFusionModel
+from enhanced_fusion_model import MODALITY_ORDER, EnhancedFusionModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from env_defaults import (  # noqa: E402
@@ -73,12 +73,6 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--output", default="fusion/best_enhanced_fusion_model.pt")
     parser.add_argument("--history-output", default="fusion/training_history.json")
-    parser.add_argument(
-        "--fusion-architecture",
-        choices=["attention", "gated"],
-        default="attention",
-        help="Keep 'attention' as the backward-compatible default; use 'gated' for the gated baseline.",
-    )
     args = parser.parse_args()
 
     OFFICIAL_PROTOCOL_WARNING = (
@@ -103,13 +97,11 @@ def main():
         visual_root=args.visual_root, audio_root=args.audio_root, semantic_root=args.semantic_root,
         blink_root=args.blink_root, lipsync_root=args.lipsync_root,
         split_path=args.split_path, split_name="train", normalization_stats=normalization,
-        return_reliability=True,
     )
     val_dataset = EnhancedFusionDataset(
         visual_root=args.visual_root, audio_root=args.audio_root, semantic_root=args.semantic_root,
         blink_root=args.blink_root, lipsync_root=args.lipsync_root,
         split_path=args.split_path, split_name="validation", normalization_stats=normalization,
-        return_reliability=True,
     )
     print(f"\nTraining samples:   {len(train_dataset)}")
     print(f"Validation samples: {len(val_dataset)}")
@@ -125,7 +117,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    model = EnhancedFusionModel(fusion_architecture=args.fusion_architecture).to(device)
+    model = EnhancedFusionModel().to(device)
 
     train_labels = [sample[5] for sample in train_dataset.samples]
     real_count = train_labels.count(0)
@@ -175,7 +167,7 @@ def main():
                     "split_path": args.split_path,
                     "train_samples": len(train_dataset),
                     "validation_samples": len(val_dataset),
-                    "fusion_architecture": args.fusion_architecture,
+                    "fusion_architecture": "attention",
                 },
                 "history": history,
                 "best_val_f1": best_f1,
@@ -188,14 +180,13 @@ def main():
         print(f"\n========== Epoch {epoch + 1}/{args.epochs} ==========")
 
         for batch_idx, batch in enumerate(train_loader):
-            visual, audio, semantic, blink, lipsync, labels_batch, reliability = batch
+            visual, audio, semantic, blink, lipsync, labels_batch = batch
             visual, audio, semantic = visual.to(device), audio.to(device), semantic.to(device)
             blink, lipsync = blink.to(device), lipsync.to(device)
-            reliability = reliability.to(device)
             labels_batch = labels_batch.to(device)
 
             optimizer.zero_grad()
-            logits, _ = model(visual, audio, semantic, blink, lipsync, reliability=reliability)
+            logits, _ = model(visual, audio, semantic, blink, lipsync)
             loss = criterion(logits, labels_batch)
             loss.backward()
             optimizer.step()
@@ -210,12 +201,11 @@ def main():
         all_predictions, all_labels = [], []
 
         with torch.no_grad():
-            for visual, audio, semantic, blink, lipsync, labels_batch, reliability in val_loader:
+            for visual, audio, semantic, blink, lipsync, labels_batch in val_loader:
                 visual, audio, semantic = visual.to(device), audio.to(device), semantic.to(device)
                 blink, lipsync = blink.to(device), lipsync.to(device)
-                reliability = reliability.to(device)
 
-                logits, _ = model(visual, audio, semantic, blink, lipsync, reliability=reliability)
+                logits, _ = model(visual, audio, semantic, blink, lipsync)
                 predictions = torch.argmax(logits, dim=1)
 
                 all_predictions.extend(predictions.cpu().numpy())
@@ -252,11 +242,8 @@ def main():
             with open(model_meta_path, "w", encoding="utf-8") as f:
                 json.dump({
                     "model_class": "EnhancedFusionModel",
-                    "fusion_architecture": args.fusion_architecture,
-                    "modality_order": model.modality_order,
-                    "uses_reliability_gates": bool(model.use_reliability_gates),
-                    "reliability_order": model.modality_order,
-                    "semantic_invalid_when_all_zero": True,
+                    "fusion_architecture": "attention",
+                    "modality_order": list(MODALITY_ORDER),
                 }, f, indent=2)
             print(f"Saved model metadata to {model_meta_path}")
         else:

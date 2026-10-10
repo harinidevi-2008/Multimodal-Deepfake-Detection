@@ -16,3 +16,5 @@ missing_videos.txt
 # API layer job-scoped temp files (uploads, per-request extracted
 # features, served evidence frames) - never real dataset/training data.
 runtime/
+
+.venv/

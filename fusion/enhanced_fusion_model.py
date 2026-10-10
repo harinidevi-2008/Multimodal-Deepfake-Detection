@@ -26,16 +26,18 @@ import torch.nn as nn
 
 MODALITY_ORDER = ["visual", "audio", "semantic", "blink", "lipsync"]
 
+# Parameters that the Innovation Day "gated" variant added to the module.
+# They are not part of the documented architecture. Checkpoints saved while
+# that code was in place still carry them (untrained, unused in "attention"
+# mode), so the loader below drops them instead of failing a strict load.
+_LEGACY_GATE_KEY_PREFIXES = ("reliability_gates.", "invalid_retention_logits")
+
 
 def semantic_validity(semantic, eps=1e-8):
     """
-    Returns a (B, 1) reliability signal for semantic features.
-
-    The existing semantic extractor can produce an all-zero 384-d vector
-    when transcript/embedding generation is degraded. That vector is still
-    a valid tensor shape, but it is not valid semantic evidence. We preserve
-    the raw vector and expose a bounded reliability bit instead of replacing
-    it with fabricated content.
+    (B, 1) flag: 1.0 when the semantic vector is not the all-zero sentinel
+    that the semantic extractor writes for empty or unreliable transcripts.
+    Used for reporting only. It does not change the fusion forward pass.
     """
     if semantic.ndim == 1:
         semantic = semantic.unsqueeze(0)
@@ -45,11 +47,8 @@ def semantic_validity(semantic, eps=1e-8):
 
 def default_reliability(semantic):
     """
-    Reliability layout matches MODALITY_ORDER.
-
-    Only semantic currently has a reliable missing/degraded sentinel in the
-    feature pipeline: an all-zero embedding. The other modalities remain
-    available unless callers pass explicit reliability values in the future.
+    (B, 5) reporting vector in MODALITY_ORDER. Only the semantic stream has
+    a degraded sentinel (the zero vector), so the other entries are 1.0.
     """
     sem_valid = semantic_validity(semantic)
     ones = torch.ones_like(sem_valid)
@@ -68,17 +67,8 @@ class EnhancedFusionModel(nn.Module):
         fusion_dim=256,
         num_heads=8,
         num_classes=2,
-        fusion_architecture="attention",
-        use_reliability_gates=None,
     ):
         super().__init__()
-        if fusion_architecture not in ("attention", "gated"):
-            raise ValueError("fusion_architecture must be 'attention' or 'gated'")
-        self.fusion_architecture = fusion_architecture
-        self.use_reliability_gates = (
-            fusion_architecture == "gated" if use_reliability_gates is None else bool(use_reliability_gates)
-        )
-        self.modality_order = list(MODALITY_ORDER)
 
         self.visual_projection = nn.Sequential(
             nn.Linear(visual_dim, fusion_dim), nn.LayerNorm(fusion_dim), nn.ReLU()
@@ -100,19 +90,6 @@ class EnhancedFusionModel(nn.Module):
             embed_dim=fusion_dim, num_heads=num_heads, batch_first=True
         )
 
-        # Each gate receives one projected modality token plus that
-        # modality's reliability scalar. The learned sigmoid decides how
-        # much of the token should reach fusion. For semantic=invalid, an
-        # additional trainable retention factor starts low, so the semantic
-        # token is reduced but not hard-deleted; training can learn a
-        # different retention if the data supports it.
-        self.reliability_gates = nn.ModuleList(
-            [nn.Linear(fusion_dim + 1, 1) for _ in MODALITY_ORDER]
-        )
-        for gate in self.reliability_gates:
-            nn.init.zeros_(gate.weight[:, -1])
-        self.invalid_retention_logits = nn.Parameter(torch.full((len(MODALITY_ORDER),), -2.0))
-
         self.norm = nn.LayerNorm(fusion_dim)
 
         self.classifier = nn.Sequential(
@@ -122,73 +99,60 @@ class EnhancedFusionModel(nn.Module):
             nn.Linear(128, num_classes),
         )
 
-    def _project_modalities(self, visual, audio, semantic, blink, lipsync):
+    def forward(self, visual, audio, semantic, blink, lipsync):
         visual = self.visual_projection(visual)
         audio = self.audio_projection(audio)
         semantic = self.semantic_projection(semantic)
         blink = self.blink_projection(blink)
         lipsync = self.lipsync_projection(lipsync)
-        return torch.stack([visual, audio, semantic, blink, lipsync], dim=1)
-
-    def _reliability(self, semantic, reliability):
-        if reliability is None:
-            reliability = default_reliability(semantic)
-        if reliability.ndim == 1:
-            reliability = reliability.unsqueeze(0)
-        if reliability.shape[1] != len(MODALITY_ORDER):
-            raise ValueError(
-                f"reliability must have {len(MODALITY_ORDER)} values in order {MODALITY_ORDER}, "
-                f"got shape {tuple(reliability.shape)}"
-            )
-        return reliability.to(device=semantic.device, dtype=semantic.dtype).clamp(0.0, 1.0)
-
-    def _apply_reliability_gates(self, modalities, reliability):
-        gate_values = []
-        gated_tokens = []
-        invalid_retention = torch.sigmoid(self.invalid_retention_logits).view(1, -1, 1)
-        reliability_3d = reliability.unsqueeze(-1)
-        reliability_factor = reliability_3d + (1.0 - reliability_3d) * invalid_retention
-
-        for index, gate in enumerate(self.reliability_gates):
-            token = modalities[:, index, :]
-            rel = reliability[:, index:index + 1]
-            learned_gate = torch.sigmoid(gate(torch.cat([token, rel], dim=1)))
-            effective_gate = learned_gate * reliability_factor[:, index, :]
-            gate_values.append(effective_gate)
-            gated_tokens.append(token * effective_gate)
-
-        return torch.stack(gated_tokens, dim=1), torch.cat(gate_values, dim=1)
-
-    def forward(self, visual, audio, semantic, blink, lipsync, reliability=None, return_diagnostics=False):
-        reliability = self._reliability(semantic, reliability)
-        modalities = self._project_modalities(visual, audio, semantic, blink, lipsync)
-        if self.use_reliability_gates:
-            fused_modalities, gate_values = self._apply_reliability_gates(modalities, reliability)
-        else:
-            fused_modalities = modalities
-            gate_values = torch.ones(
-                modalities.shape[0], len(MODALITY_ORDER), device=modalities.device, dtype=modalities.dtype
-            )
 
         # (B, 5, fusion_dim) - order matters only for reading attention
         # weights back out; the model itself is permutation-symmetric.
-        if self.fusion_architecture == "attention":
-            attended, attention_weights = self.cross_attention(
-                fused_modalities, fused_modalities, fused_modalities
-            )
-            fused = self.norm(fused_modalities + attended)
-            fused = fused.mean(dim=1)
-        else:
-            attention_weights = None
-            fused = self.norm(fused_modalities.mean(dim=1))
+        modalities = torch.stack([visual, audio, semantic, blink, lipsync], dim=1)
+
+        attended, attention_weights = self.cross_attention(modalities, modalities, modalities)
+
+        fused = self.norm(modalities + attended)
+        fused = fused.mean(dim=1)
 
         logits = self.classifier(fused)
-        if return_diagnostics:
-            return logits, attention_weights, {
-                "reliability": reliability,
-                "gate_values": gate_values,
-                "modality_order": list(MODALITY_ORDER),
-                "fusion_architecture": self.fusion_architecture,
-                "use_reliability_gates": self.use_reliability_gates,
-            }
         return logits, attention_weights
+
+
+def load_enhanced_state_dict(model, state_dict, strict=True):
+    """
+    Load a checkpoint into the attention-only EnhancedFusionModel.
+
+    Gate parameters left over from the removed gated variant are dropped
+    (they were never used by attention checkpoints). A checkpoint of the
+    gated architecture itself cannot be loaded, because its token mixing is
+    a different computation.
+    """
+    cleaned = {
+        key: value for key, value in state_dict.items()
+        if not key.startswith(_LEGACY_GATE_KEY_PREFIXES)
+    }
+    dropped = sorted(set(state_dict) - set(cleaned))
+    result = model.load_state_dict(cleaned, strict=strict)
+    return result, dropped
+
+
+def check_checkpoint_architecture(weights_path):
+    """
+    Refuse checkpoints that a sidecar *.model_meta.json marks as the removed
+    gated architecture. Checkpoints with no sidecar are attention models.
+    """
+    import json
+    from pathlib import Path
+
+    meta_path = Path(str(weights_path) + ".model_meta.json")
+    if not meta_path.exists():
+        return "attention"
+    with open(meta_path, "r", encoding="utf-8") as f:
+        architecture = json.load(f).get("fusion_architecture", "attention")
+    if architecture != "attention":
+        raise ValueError(
+            f"{weights_path} was trained with the '{architecture}' fusion architecture, which is not part "
+            "of the documented design and is no longer supported. Use an attention checkpoint."
+        )
+    return architecture

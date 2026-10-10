@@ -20,7 +20,7 @@ import sys
 sys.path.insert(0, str(FUSION_DIR))
 
 from enhanced_fusion_dataset import EnhancedFusionDataset
-from enhanced_fusion_model import EnhancedFusionModel
+from enhanced_fusion_model import EnhancedFusionModel, load_enhanced_state_dict
 from feature_normalization import load_normalization
 
 
@@ -62,8 +62,8 @@ def main():
     )
     relative_paths = [path.relative_to(MODALITY_ROOTS["visual"]) for path, *_ in dataset.samples]
 
-    model = EnhancedFusionModel(fusion_architecture="attention")
-    model.load_state_dict(torch.load(WEIGHTS_PATH, map_location="cpu"), strict=True)
+    model = EnhancedFusionModel()
+    load_enhanced_state_dict(model, torch.load(WEIGHTS_PATH, map_location="cpu"), strict=True)
     model.eval()
 
     records = []
@@ -72,7 +72,7 @@ def main():
         for visual, audio, semantic, blink, lipsync, labels, reliability in DataLoader(
             dataset, batch_size=256, shuffle=False
         ):
-            logits, _ = model(visual, audio, semantic, blink, lipsync, reliability=reliability)
+            logits, _ = model(visual, audio, semantic, blink, lipsync)
             probabilities = torch.softmax(logits, dim=1)
             for index, label in enumerate(labels.tolist()):
                 relative_path = relative_paths[cursor]

@@ -81,7 +81,11 @@ import torch
 
 from single_stream_classifier import SingleStreamClassifier  # noqa: E402
 from enhanced_fusion_model import EnhancedFusionModel  # noqa: E402
-from enhanced_fusion_model import default_reliability  # noqa: E402
+from enhanced_fusion_model import (  # noqa: E402
+    check_checkpoint_architecture,
+    default_reliability,
+    load_enhanced_state_dict,
+)
 from feature_normalization import (  # noqa: E402
     DEFAULT_NORMALIZATION_PATH,
     apply_normalization,
@@ -141,23 +145,11 @@ def require_file(path, description):
     return p
 
 
-def architecture_for_checkpoint(weights_path, fallback="attention"):
-    """Legacy checkpoints have no sidecar metadata and are attention models."""
-    meta_path = Path(str(weights_path) + ".model_meta.json")
-    if not meta_path.exists():
-        return fallback
-    import json
-    with open(meta_path, "r", encoding="utf-8") as f:
-        return json.load(f).get("fusion_architecture", fallback)
-
-
 def threshold_key_for_checkpoint(weights_path):
     path = Path(weights_path).resolve()
     name = path.name
     if name == "best_enhanced_fusion_model_attention.pt":
         return "enhanced_attention"
-    if name == "best_enhanced_fusion_model_gated.pt":
-        return "enhanced_gated"
     if name == "best_enhanced_fusion_model.pt":
         return "enhanced_base"
     return None
@@ -454,24 +446,21 @@ def run_full_inference(
     reliability = default_reliability(tensors[2])
 
     fusion_started = time.monotonic()
-    fusion_model = EnhancedFusionModel(
-        fusion_architecture=architecture_for_checkpoint(enhanced_fusion_weights)
-    )
+    check_checkpoint_architecture(enhanced_fusion_weights)
+    fusion_model = EnhancedFusionModel()
     state_dict = torch.load(enhanced_fusion_weights, map_location="cpu")
     try:
-        load_result = fusion_model.load_state_dict(state_dict, strict=True)
+        load_result, _dropped_gate_keys = load_enhanced_state_dict(fusion_model, state_dict, strict=True)
         checkpoint_load_mode = "strict"
     except RuntimeError:
         if Path(enhanced_fusion_weights).name != "best_enhanced_fusion_model.pt":
             raise
-        load_result = fusion_model.load_state_dict(state_dict, strict=False)
+        load_result, _dropped_gate_keys = load_enhanced_state_dict(fusion_model, state_dict, strict=False)
         checkpoint_load_mode = "legacy_strict_false"
     fusion_model.eval()
 
     with torch.inference_mode():
-        logits, attention, gate_diagnostics = fusion_model(
-            *tensors, reliability=reliability, return_diagnostics=True
-        )
+        logits, attention = fusion_model(*tensors)
         probs = torch.softmax(logits, dim=1)
         final_fake_probability = probs[0, 1].item()
         final_real_probability = probs[0, 0].item()
@@ -479,13 +468,7 @@ def run_full_inference(
     decision_threshold, threshold_source = load_calibrated_threshold(enhanced_fusion_weights, thresholds_path)
     prediction = "DEEPFAKE" if final_fake_probability >= decision_threshold else "REAL"
 
-    if attention is None:
-        attention_summary = {
-            name: round(float(value), 4)
-            for name, value in zip(MODALITY_ORDER_5, gate_diagnostics["gate_values"][0].cpu().tolist())
-        }
-    else:
-        attention_summary = summarize_attention(attention, MODALITY_ORDER_5)
+    attention_summary = summarize_attention(attention, MODALITY_ORDER_5)
     evidence_started = time.monotonic()
     contribution = modality_contributions(fusion_model, tensors, MODALITY_ORDER_5)
 
@@ -591,18 +574,14 @@ def run_full_inference(
             "predicted_class_index": 1 if prediction == "DEEPFAKE" else 0,
             "predicted_class": prediction,
             "modality_order": list(MODALITY_ORDER_5),
-            "fusion_architecture": gate_diagnostics["fusion_architecture"],
+            "fusion_architecture": "attention",
             "checkpoint_path": str(Path(enhanced_fusion_weights).resolve()),
             "checkpoint_load_mode": checkpoint_load_mode,
             "checkpoint_missing_keys": list(load_result.missing_keys),
             "checkpoint_unexpected_keys": list(load_result.unexpected_keys),
             "modality_reliability": {
                 name: round(float(value), 6)
-                for name, value in zip(MODALITY_ORDER_5, gate_diagnostics["reliability"][0].cpu().tolist())
-            },
-            "modality_gates": {
-                name: round(float(value), 6)
-                for name, value in zip(MODALITY_ORDER_5, gate_diagnostics["gate_values"][0].cpu().tolist())
+                for name, value in zip(MODALITY_ORDER_5, reliability[0].cpu().tolist())
             },
         },
         "evidence": evidence,

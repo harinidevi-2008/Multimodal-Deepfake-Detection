@@ -27,7 +27,11 @@ from single_stream_dataset import SingleStreamDataset  # noqa: E402
 from fusion_dataset import FusionDataset  # noqa: E402
 from fusion_model import FusionModel  # noqa: E402
 from enhanced_fusion_dataset import EnhancedFusionDataset  # noqa: E402
-from enhanced_fusion_model import EnhancedFusionModel  # noqa: E402
+from enhanced_fusion_model import (  # noqa: E402
+    EnhancedFusionModel,
+    check_checkpoint_architecture,
+    load_enhanced_state_dict,
+)
 from env_defaults import (  # noqa: E402
     DEFAULT_AUDIO_ROOT,
     DEFAULT_BLINK_ROOT,
@@ -43,14 +47,6 @@ THRESHOLD_CRITERION = (
     "Maximize validation balanced accuracy over unique validation fake-probability scores; "
     "break ties by validation F1, then by threshold closest to 0.5. Test labels are never used."
 )
-
-
-def architecture_for_checkpoint(weights_path, fallback="attention"):
-    meta_path = Path(str(weights_path) + ".model_meta.json")
-    if not meta_path.exists():
-        return fallback
-    with open(meta_path, "r", encoding="utf-8") as f:
-        return json.load(f).get("fusion_architecture", fallback)
 
 
 def _candidate_thresholds(probs):
@@ -125,14 +121,13 @@ def probs_for_loader(model, loader, device, kind):
             visual, audio, semantic, labels = batch
             logits, _ = model(visual.to(device), audio.to(device), semantic.to(device))
         elif kind == "enhanced":
-            visual, audio, semantic, blink, lipsync, labels, reliability = batch
+            visual, audio, semantic, blink, lipsync, labels = batch
             logits, _ = model(
                 visual.to(device),
                 audio.to(device),
                 semantic.to(device),
                 blink.to(device),
                 lipsync.to(device),
-                reliability=reliability.to(device),
             )
         else:
             raise ValueError(f"unknown loader kind: {kind}")
@@ -170,9 +165,11 @@ def eval_fusion3(name, roots, weights, split_path, batch_size, device):
 
 
 def eval_enhanced(name, roots, weights, split_path, normalization, batch_size, device):
-    architecture = architecture_for_checkpoint(weights)
-    model = EnhancedFusionModel(fusion_architecture=architecture).to(device)
-    load_result = model.load_state_dict(torch.load(weights, map_location=device), strict=False)
+    architecture = check_checkpoint_architecture(weights)
+    model = EnhancedFusionModel().to(device)
+    load_result, _dropped_gate_keys = load_enhanced_state_dict(
+        model, torch.load(weights, map_location=device), strict=False
+    )
     model.eval()
 
     def run(split):
@@ -186,7 +183,6 @@ def eval_enhanced(name, roots, weights, split_path, normalization, batch_size, d
             split_name=split,
             normalization_stats=normalization,
             cache_features=True,
-            return_reliability=True,
         )
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         return probs_for_loader(model, loader, device, "enhanced")
@@ -263,7 +259,6 @@ def main():
         ("fusion_3_stream", lambda: eval_fusion3("3-stream Fusion", roots, REPO_ROOT / "fusion" / "best_fusion_model.pt", args.split_path, args.batch_size, device)),
         ("enhanced_base", lambda: eval_enhanced("5-stream Enhanced Fusion", roots, REPO_ROOT / "fusion" / "best_enhanced_fusion_model.pt", args.split_path, normalization, args.batch_size, device)),
         ("enhanced_attention", lambda: eval_enhanced("5-stream Enhanced Fusion Attention", roots, REPO_ROOT / "fusion" / "best_enhanced_fusion_model_attention.pt", args.split_path, normalization, args.batch_size, device)),
-        ("enhanced_gated", lambda: eval_enhanced("5-stream Enhanced Fusion Gated", roots, REPO_ROOT / "fusion" / "best_enhanced_fusion_model_gated.pt", args.split_path, normalization, args.batch_size, device)),
     ]
 
     results = {}

@@ -1,3 +1,5 @@
+> Note (integration_changes): the "gated" 5-stream results in this historical report describe a variant that has been removed from this branch. See RESTORATION_CHANGELOG.md.
+
 # Phase 11-20 Validation Report
 
 ## Dataset

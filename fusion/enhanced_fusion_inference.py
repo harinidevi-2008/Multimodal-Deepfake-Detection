@@ -18,7 +18,6 @@ Usage:
 """
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -39,16 +38,11 @@ from env_defaults import (  # noqa: E402
     DEFAULT_VISUAL_ROOT,
 )
 from feature_normalization import DEFAULT_NORMALIZATION_PATH, apply_normalization, load_normalization  # noqa: E402
-from enhanced_fusion_model import default_reliability  # noqa: E402
+from enhanced_fusion_model import (  # noqa: E402
+    check_checkpoint_architecture,
+    load_enhanced_state_dict,
+)
 from full_pipeline import DEFAULT_THRESHOLDS_PATH, load_calibrated_threshold  # noqa: E402
-
-
-def architecture_for_checkpoint(weights_path, fallback="attention"):
-    meta_path = Path(str(weights_path) + ".model_meta.json")
-    if not meta_path.exists():
-        return fallback
-    with open(meta_path, "r", encoding="utf-8") as f:
-        return json.load(f).get("fusion_architecture", fallback)
 
 
 def load_features(visual_path, audio_path, semantic_path, blink_path, lipsync_path, normalization=None):
@@ -72,14 +66,15 @@ def load_features(visual_path, audio_path, semantic_path, blink_path, lipsync_pa
 
 
 def load_model(weights_path):
-    model = EnhancedFusionModel(fusion_architecture=architecture_for_checkpoint(weights_path))
+    check_checkpoint_architecture(weights_path)
+    model = EnhancedFusionModel()
     state_dict = torch.load(weights_path, map_location="cpu")
     try:
-        model.load_state_dict(state_dict, strict=True)
+        load_enhanced_state_dict(model, state_dict, strict=True)
     except RuntimeError:
         if Path(weights_path).name != "best_enhanced_fusion_model.pt":
             raise
-        model.load_state_dict(state_dict, strict=False)
+        load_enhanced_state_dict(model, state_dict, strict=False)
     model.eval()
     return model
 
@@ -100,8 +95,7 @@ def predict(
     model = load_model(weights_path)
 
     with torch.no_grad():
-        reliability = default_reliability(semantic)
-        logits, attention = model(visual, audio, semantic, blink, lipsync, reliability=reliability)
+        logits, attention = model(visual, audio, semantic, blink, lipsync)
         probabilities = torch.softmax(logits, dim=1)
 
         fake_probability = probabilities[0, 1].item()

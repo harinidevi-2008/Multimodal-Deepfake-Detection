@@ -109,16 +109,40 @@ This distinction is enforced in `api/serializer.py` and mirrored in the frontend
 
 ## Fusion
 
-`fusion/enhanced_fusion_model.py`'s `EnhancedFusionModel` projects all five modality vectors
-into a shared 256-d space and combines them with cross-attention (`nn.MultiheadAttention`),
-exactly as it already existed in this repo — the architecture was not changed for this
-integration. Its output produces `final_fake_probability` / `final_real_probability` /
-`final_verdict`, using the same 0.5 decision threshold and the same low-confidence-margin
-logic (`evidence/evidence_builder.py`) already established in the pipeline. No second,
-conflicting threshold system was introduced.
+`fusion/enhanced_fusion_model.py`'s `EnhancedFusionModel` is the documented fusion block.
+Five vectors enter it, in this order: visual (1280-d), audio (768-d), semantic (384-d),
+blink (4-d) and lip-sync (2-d). Each goes through its own `Linear -> LayerNorm -> ReLU`
+projection into a shared 256-d space, giving five tokens. The tokens pass through one
+8-head `nn.MultiheadAttention` layer (self-attention over the five tokens), a residual
+connection and a `LayerNorm`, then mean pooling over the tokens, then a
+`Linear(256,128) -> ReLU -> Dropout(0.2) -> Linear(128,2)` head.
+`fusion/fusion_model.py`'s `FusionModel` is the same block with the first three tokens only.
+
+The reliability-gated variant that was added for Innovation Day has been removed from this
+branch (see `RESTORATION_CHANGELOG.md`). Checkpoints saved while that code existed still
+load, because the unused gate parameters are dropped by `load_enhanced_state_dict`. A
+checkpoint whose `*.model_meta.json` says `gated` is refused.
+
+The model output produces `final_fake_probability` / `final_real_probability`. The
+prediction uses the validation-calibrated threshold stored in `eval/results/thresholds.json`
+for the checkpoint in use (0.5 when no entry exists). This calibration step was added after
+the original methodology was written and is kept; it changes only the REAL/DEEPFAKE cut-off,
+never the probability.
 
 `attention_summary` (descriptive, non-causal) and `modality_contributions` (ablation-based)
 come straight from `fusion/attention_utils.py` and `fusion/modality_contribution.py`.
+
+## Selected datasets
+
+The experimental datasets for this project are LAV-DF, FakeAVCeleb and AV-Deepfake1M++.
+The existing pipeline was built and trained on FakeAVCeleb (the default). LAV-DF has
+restartable preprocessing scripts (`scripts/preprocess_lavdf_*.py`, with `--root` and
+`--limit`); the reports in `scripts/` record only a 100-video dev pilot and a 2-video train
+smoke run, not a full extraction. FaceForensics++
+support (`DATASET_NAME=ffpp`) is kept as optional code but FaceForensics++ is not a selected
+dataset. No AV-Deepfake1M++ preprocessing is included, and none of the preprocessing
+scripts download or process a whole dataset automatically. Dataset locations are set with
+`DATASET_ROOT` / `DATASET_NAME` and the `DFD_*` variables below.
 
 ## Evidence
 
@@ -235,7 +259,7 @@ need to point at feature/checkpoint locations different from the repo-relative d
 | `DFD_VISUAL_CLASSIFIER_WEIGHTS` | `classifiers/best_visual_classifier.pt` | visual classifier checkpoint |
 | `DFD_AUDIO_CLASSIFIER_WEIGHTS` | `classifiers/best_audio_classifier.pt` | audio classifier checkpoint |
 | `DFD_SEMANTIC_CLASSIFIER_WEIGHTS` | `classifiers/best_semantic_classifier.pt` | semantic classifier checkpoint |
-| `DFD_ENHANCED_FUSION_WEIGHTS` | `fusion/best_enhanced_fusion_model.pt` | 5-modal fusion checkpoint |
+| `DFD_ENHANCED_FUSION_WEIGHTS` | `fusion/best_enhanced_fusion_model_attention.pt` | 5-modal fusion checkpoint |
 | `DFD_FUSION_WEIGHTS` | `fusion/best_fusion_model.pt` | original 3-modal fusion checkpoint (the one currently shipped) |
 
 These are the actual variable names already defined in `fusion/env_defaults.py` — the API
@@ -307,7 +331,7 @@ with this repo. The four checkpoints the 5-modal pipeline needs do not exist yet
 - `classifiers/best_visual_classifier.pt`
 - `classifiers/best_audio_classifier.pt`
 - `classifiers/best_semantic_classifier.pt`
-- `fusion/best_enhanced_fusion_model.pt`
+- `fusion/best_enhanced_fusion_model_attention.pt` (default; set `DFD_ENHANCED_FUSION_WEIGHTS` to use another attention checkpoint)
 
 `inference/full_pipeline.py`'s `require_file()` check deliberately raises
 `MissingCheckpointError` — never a random/fabricated prediction — when any of these are
