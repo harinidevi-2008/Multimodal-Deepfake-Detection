@@ -10,7 +10,7 @@ export default function ResultsDashboard({ result, onReset }) {
   return (
     <div className="stack" style={{ gap: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
-        <h1 style={{ fontSize: 22 }}>Deepfake Analysis</h1>
+        <h1 style={{ fontSize: 22 }}>Video Analysis</h1>
         <button className="btn btn-secondary btn-sm" onClick={onReset}>
           Analyze another video
         </button>
@@ -28,7 +28,7 @@ export default function ResultsDashboard({ result, onReset }) {
       </div>
 
       <div className="section-heading">
-        <h2>Why This Video Was Flagged</h2>
+        <h2>Evidence Summary</h2>
       </div>
       <ContextualAnalysis contextualAnalysis={result.contextual_analysis} />
 
@@ -36,6 +36,7 @@ export default function ResultsDashboard({ result, onReset }) {
         <h2>Evidence</h2>
       </div>
       <EvidenceViewer evidence={result.evidence} />
+
     </div>
   )
 }

@@ -1,0 +1,34 @@
+{
+  "000469.mp4": {
+    "video_path": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\datasets\\LAV-DF\\complete_extract\\LAV-DF\\train\\000469.mp4",
+    "relative_path": "000469.mp4",
+    "video_stem": "000469",
+    "embedding": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\data\\lavdf_full\\train\\semantic\\000469.npy",
+    "dataset": "lavdf",
+    "split": "train",
+    "transcript": "I'm just back in my hometown. I'm not glad when we've done one or four part now. We're kind of expanding a little bit, but it's great. It's good for the community.",
+    "confidence": -0.5348030970646784,
+    "language": "en",
+    "reliable": true,
+    "shape": [
+      384
+    ],
+    "dtype": "float32"
+  },
+  "000470.mp4": {
+    "video_path": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\datasets\\LAV-DF\\complete_extract\\LAV-DF\\train\\000470.mp4",
+    "relative_path": "000470.mp4",
+    "video_stem": "000470",
+    "embedding": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\data\\lavdf_full\\train\\semantic\\000470.npy",
+    "dataset": "lavdf",
+    "split": "train",
+    "transcript": "I was back in my hometown, not back when we did one of four part now. We're kind of expanding a little bit, but it's great. It was evil for the community.",
+    "confidence": -0.5251024495000425,
+    "language": "en",
+    "reliable": true,
+    "shape": [
+      384
+    ],
+    "dtype": "float32"
+  }
+}

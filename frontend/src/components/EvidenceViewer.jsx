@@ -1,5 +1,6 @@
 import FrameViewer from './FrameViewer'
 import EmptyState from './ui/EmptyState'
+import AudioTimeline from './AudioTimeline'
 
 export default function EvidenceViewer({ evidence }) {
   const ev = evidence || {}
@@ -12,14 +13,34 @@ export default function EvidenceViewer({ evidence }) {
       <div className="stack" style={{ gap: 'var(--space-4)' }}>
         {hasFrames ? (
           <div>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Selected frames</div>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Visual Evidence Frames</div>
             <FrameViewer frames={frames} />
           </div>
         ) : (
           <EmptyState
-            title="Relevant frames unavailable"
-            body="No localized visual evidence was returned for this result."
+            title="Visual evidence frames unavailable"
+            body="No selected context frames were returned for this result."
           />
+        )}
+
+        {ev.audio_waveform ? (
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Audio evidence</div>
+            <AudioTimeline audioWaveform={ev.audio_waveform} />
+          </div>
+        ) : ev.audio_evidence_status === 'unavailable' ? (
+          <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: 0 }}>
+            Audio analysis: Not available. Reason: {ev.audio_unavailable_reason || 'No audio stream detected'}.
+          </p>
+        ) : null}
+
+        {ev.semantic_context?.transcript && (
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Transcript</div>
+            <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: 0 }}>
+              {ev.semantic_context.transcript}
+            </p>
+          </div>
         )}
 
         {hasLocalizedLipSync ? (
@@ -31,7 +52,7 @@ export default function EvidenceViewer({ evidence }) {
           </div>
         ) : (
           <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: 0 }}>
-            Audio and visual consistency signals were used in the overall verdict, but no localized audio or lip-sync proof was available for this result.
+            Audio/visual evidence is global unless timestamped evidence is available; no localized lip-sync proof was returned.
           </p>
         )}
       </div>

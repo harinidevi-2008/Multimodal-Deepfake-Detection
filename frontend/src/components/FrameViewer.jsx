@@ -16,6 +16,11 @@ const EVIDENCE_TYPE_LABEL = {
   other: 'Other'
 }
 
+const SELECTION_REASON_LABEL = {
+  eye_blink_event: 'Selected for blink-event evidence',
+  uniform_sample: 'Uniformly sampled visual context'
+}
+
 // Backend frame evidence may arrive as a data: URI (mock fixtures) or a
 // server-relative evidence URL like "/api/evidence/<job_id>/<file>" (real
 // backend, see API_CONTRACT.md) — either key resolves the same way.
@@ -60,7 +65,7 @@ export default function FrameViewer({ frames }) {
           }}
         >
           <Badge tone={frame.frame_selection_reason === 'eye_blink_event' ? 'warning' : 'neutral'}>
-            {REASON_LABEL[frame.frame_selection_reason] || frame.frame_selection_reason}
+            {SELECTION_REASON_LABEL[frame.frame_selection_reason] || REASON_LABEL[frame.frame_selection_reason] || frame.frame_selection_reason}
           </Badge>
           <Badge tone={frame.evidence_type === 'localized_visual_artifact' ? 'warning' : 'neutral'}>
             {EVIDENCE_TYPE_LABEL[frame.evidence_type] || frame.evidence_type || 'Context'}
@@ -71,7 +76,7 @@ export default function FrameViewer({ frames }) {
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11.5, color: 'var(--text-muted)' }}>
         <span><strong>Timestamp:</strong> {formatSeconds(frame.timestamp_seconds)}</span>
-        <span><strong>Reason:</strong> {REASON_LABEL[frame.frame_selection_reason] || frame.frame_selection_reason || 'Supporting visual sample'}</span>
+        <span><strong>Reason:</strong> {SELECTION_REASON_LABEL[frame.frame_selection_reason] || REASON_LABEL[frame.frame_selection_reason] || frame.frame_selection_reason || 'Supporting visual sample'}</span>
         <span><strong>Evidence:</strong> {EVIDENCE_TYPE_LABEL[frame.evidence_type] || frame.evidence_type || 'Supporting visual sample'}</span>
         {Number.isFinite(Number(frame.confidence)) && <span><strong>Confidence:</strong> {Number(frame.confidence).toFixed(2)}</span>}
         {frame.strength && <span><strong>Strength:</strong> {frame.strength}</span>}

@@ -18,7 +18,7 @@ export default function ModalityCard({ meta, data }) {
           <span style={{ width: 9, height: 9, borderRadius: 999, background: meta.color }} />
           <span style={{ fontWeight: 700, fontSize: 13.5 }}>{meta.label}</span>
         </div>
-        <EmptyState title="Analysis unavailable" body="No result was returned for this modality." />
+        <EmptyState title="Not available" body={data?.explanation || data?.reason || 'No result was returned for this modality.'} />
       </div>
     )
   }
@@ -51,9 +51,11 @@ export default function ModalityCard({ meta, data }) {
         </div>
       </div>
 
-      <div className="meter">
-        <div className="meter__fill" style={{ width: toPercent(value, 0), background: meta.color }} />
-      </div>
+      {Number.isFinite(Number(value)) && (
+        <div className="meter">
+          <div className="meter__fill" style={{ width: toPercent(value, 0), background: meta.color }} />
+        </div>
+      )}
 
       {data?.status && (
         <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>

@@ -30,18 +30,18 @@ export const MODALITY_META = {
   },
   eye_blink: {
     key: 'eye_blink',
-    label: 'Blink consistency',
+    label: 'Eye Blink',
     color: 'var(--hue-blink)',
     kind: 'rule_based_score',
-    metricLabel: 'Consistency',
+    metricLabel: 'Anomaly score',
     description: 'Supporting blink cue.'
   },
   lip_sync: {
     key: 'lip_sync',
-    label: 'Lip-sync consistency',
+    label: 'Lip Sync',
     color: 'var(--hue-lipsync)',
     kind: 'rule_based_score',
-    metricLabel: 'Consistency',
+    metricLabel: 'Mismatch score',
     description: 'Supporting audio-visual cue.'
   }
 }

@@ -5,17 +5,8 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 
-# librosa / moviepy / torch / transformers are intentionally NOT imported
-# at module level. This module used to import all of them here plus
-# eagerly load the Wav2Vec2 processor/model below (a real network
-# download on first run) just by being imported - so anything that
-# merely wanted `_unique_temp_audio_path()` (pure Path logic, no ML
-# dependencies at all) paid for the entire audio ML stack, and any
-# environment without librosa/moviepy/transformers installed (or without
-# network access, for the Wav2Vec2 download) failed on import rather
-# than only when audio actually needs to be processed. They are imported
-# lazily inside the functions that need them instead - see
-# _get_wav2vec2() and process_video() below.
+# Heavy ML/media dependencies are imported lazily inside the functions
+# that need them. Importing this module alone should not load the model.
 
 try:
     from .config import (
@@ -58,81 +49,156 @@ _wav2vec2_model = None
 
 def _get_wav2vec2():
     """
-    Builds (and caches) the Wav2Vec2 processor/model on first use instead
-    of at import time. `.from_pretrained()` downloads model weights over
-    the network the first time it runs for a given cache - loading it
-    eagerly at module level meant simply importing this module downloaded
-    those weights, which broke pytest collection on an offline/restricted
-    checkout and is wrong even with network access.
+    Load and cache the Wav2Vec2 processor and model on first use.
+
+    The checkpoint uses legacy weight-normalization keys for the
+    positional convolution. These are converted to the parameter names
+    expected by the installed Transformers/PyTorch model implementation.
     """
     global _wav2vec2_processor, _wav2vec2_model
+
     if _wav2vec2_model is None:
-        from transformers import Wav2Vec2Model, Wav2Vec2Processor
+        from safetensors.torch import load_file
+        from transformers import (
+            Wav2Vec2Config,
+            Wav2Vec2Model,
+            Wav2Vec2Processor,
+        )
 
         logger.info("Loading Wav2Vec2 Processor...")
         _wav2vec2_processor = Wav2Vec2Processor.from_pretrained(
-            MODEL_NAME, local_files_only=True
+            MODEL_NAME,
+            local_files_only=True,
         )
 
         logger.info("Loading Wav2Vec2 Model...")
-        model = Wav2Vec2Model.from_pretrained(MODEL_NAME, local_files_only=True)
+
+        # Locate the checkpoint already cached on this computer.
+        cache_dir = (
+            Path.home()
+            / ".cache"
+            / "huggingface"
+            / "hub"
+            / "models--facebook--wav2vec2-base-960h"
+            / "snapshots"
+        )
+
+        checkpoint_files = sorted(cache_dir.glob("*/model.safetensors"))
+
+        if not checkpoint_files:
+            raise FileNotFoundError(
+                "Could not find the cached Wav2Vec2 model.safetensors "
+                f"checkpoint under: {cache_dir}"
+            )
+
+        checkpoint = checkpoint_files[0]
+        logger.info("Using Wav2Vec2 checkpoint: %s", checkpoint)
+
+        # Read checkpoint tensors on the CPU.
+        raw_state_dict = load_file(
+            str(checkpoint),
+            device="cpu",
+        )
+
+        # Retain the Wav2Vec2 backbone, excluding the CTC prediction head.
+        state_dict = {
+            key.removeprefix("wav2vec2."): value
+            for key, value in raw_state_dict.items()
+            if key.startswith("wav2vec2.")
+        }
+
+        # Convert legacy weight-normalization names to the names expected
+        # by the current model implementation.
+        converted_state_dict = {}
+
+        for key, value in state_dict.items():
+            new_key = key.replace(
+                "encoder.pos_conv_embed.conv.weight_g",
+                "encoder.pos_conv_embed.conv.parametrizations.weight.original0",
+            ).replace(
+                "encoder.pos_conv_embed.conv.weight_v",
+                "encoder.pos_conv_embed.conv.parametrizations.weight.original1",
+            )
+
+            converted_state_dict[new_key] = value
+
+        # Construct the model from the locally cached configuration.
+        config = Wav2Vec2Config.from_pretrained(
+            MODEL_NAME,
+            local_files_only=True,
+        )
+        model = Wav2Vec2Model(config)
+
+        # Load the checkpoint and validate all expected model weights.
+        load_result = model.load_state_dict(
+            converted_state_dict,
+            strict=False,
+        )
+
+        # The checkpoint test established that masked_spec_embed is the
+        # only missing key. It is used for masked pretraining, not normal
+        # inference. Any other missing or unexpected keys must stop loading.
+        if load_result.missing_keys != ["masked_spec_embed"]:
+            raise RuntimeError(
+                "Unexpected missing Wav2Vec2 weights: "
+                f"{load_result.missing_keys}"
+            )
+
+        if load_result.unexpected_keys:
+            raise RuntimeError(
+                "Unexpected Wav2Vec2 weights: "
+                f"{load_result.unexpected_keys}"
+            )
+
+        # Freeze the pretrained model for feature extraction.
         model.eval()
 
-        # Freeze Wav2Vec2 parameters
         for param in model.parameters():
             param.requires_grad = False
 
         _wav2vec2_model = model
-        logger.info("Model loaded successfully.")
+
+        logger.info(
+            "Wav2Vec2 model loaded successfully with converted checkpoint weights."
+        )
+
     return _wav2vec2_processor, _wav2vec2_model
+
+
+# ------------------------------------------------------------
+# Temporary audio path
+# ------------------------------------------------------------
+
+def _unique_temp_audio_path(video_path: Path) -> Path:
+    """
+    Generate a deterministic, collision-safe temporary WAV path.
+
+    When the video is inside INPUT_FOLDER, mirror its relative path
+    under AUDIO_FOLDER. For arbitrary external video paths, use a
+    short hash of the absolute path.
+    """
+    video_path = Path(video_path)
+
+    try:
+        relative_path = video_path.relative_to(INPUT_FOLDER)
+        return (AUDIO_FOLDER / relative_path).with_suffix(".wav")
+
+    except ValueError:
+        digest = hashlib.sha1(
+            str(video_path.resolve()).encode("utf-8")
+        ).hexdigest()[:12]
+
+        return AUDIO_FOLDER / f"{video_path.stem}_{digest}.wav"
 
 
 # ------------------------------------------------------------
 # Process one video
 # ------------------------------------------------------------
 
-def _unique_temp_audio_path(video_path: Path) -> Path:
-    """
-    Collision-safe path under AUDIO_FOLDER for one video's temporary
-    extracted WAV file.
-
-    The previous naming (`AUDIO_FOLDER / (video_path.stem + ".wav")`)
-    was flat, so two videos with the same filename stem in different
-    dataset categories (e.g. category_A/foo/001.mp4 and
-    category_B/bar/001.mp4) both mapped to "temp_audio/001.wav" and
-    would silently overwrite each other's temp audio mid-run.
-
-    Preferred fix: mirror the video's path relative to INPUT_FOLDER
-    under AUDIO_FOLDER, exactly like OUTPUT_FOLDER already mirrors it
-    for the saved .npy features in process_directory() below. Two
-    distinct videos under INPUT_FOLDER always have distinct relative
-    paths, so this is collision-safe by construction, deterministic
-    (reruns land on the same temp path, preserving SKIP_EXISTING-style
-    reuse), and human-readable.
-
-    Fallback: process_video() is also called directly with a single,
-    arbitrary video path that is not necessarily under INPUT_FOLDER
-    (see audio/src/extractor.py, used for one-off/application-style
-    extraction outside the batch dataset walk). relative_to() raises
-    ValueError in that case; fall back to a flat name built from the
-    stem plus a short hash of the resolved absolute path, which stays
-    deterministic and collision-safe without assuming any directory
-    structure.
-    """
-    try:
-        relative_path = video_path.relative_to(INPUT_FOLDER)
-        return (AUDIO_FOLDER / relative_path).with_suffix(".wav")
-    except ValueError:
-        digest = hashlib.sha1(str(video_path.resolve()).encode("utf-8")).hexdigest()[:12]
-        return AUDIO_FOLDER / f"{video_path.stem}_{digest}.wav"
-
-
 def process_video(video_path: Path, output_path: Path):
-    # Heavy ML/media dependencies are imported here, not at module level -
-    # see the module-level comment above _get_wav2vec2(). This keeps
-    # `_unique_temp_audio_path()` (and anything else that doesn't actually
-    # extract audio) importable without librosa/moviepy/torch/transformers
-    # installed at all.
+    """
+    Extract audio from one video and save its Wav2Vec2 feature vector.
+    """
     import torch
     import librosa
     from moviepy.editor import VideoFileClip
@@ -147,31 +213,29 @@ def process_video(video_path: Path, output_path: Path):
     audio_path.parent.mkdir(parents=True, exist_ok=True)
 
     # -----------------------
-    # Extract Audio
+    # Extract audio
     # -----------------------
 
-    # SKIP_EXISTING's own effect is on OUTPUT_FOLDER (see
-    # process_directory) - this separate existence check is an
-    # independent optimization that lets a run resumed after a crash
-    # reuse audio already extracted for a video whose feature (.npy)
-    # was not yet saved, instead of re-decoding the video. It keeps
-    # working unchanged: the path it checks is now unique per video
-    # instead of colliding across categories.
     if not audio_path.exists():
-
         clip = VideoFileClip(str(video_path))
 
-        clip.audio.write_audiofile(
-            str(audio_path),
-            fps=DEFAULT_SAMPLE_RATE,
-            verbose=False,
-            logger=None,
-        )
+        try:
+            if clip.audio is None:
+                raise ValueError(
+                    f"Video contains no audio stream: {video_path}"
+                )
 
-        clip.close()
+            clip.audio.write_audiofile(
+                str(audio_path),
+                fps=DEFAULT_SAMPLE_RATE,
+                verbose=False,
+                logger=None,
+            )
+        finally:
+            clip.close()
 
     # -----------------------
-    # Load Audio
+    # Load audio
     # -----------------------
 
     waveform, sr = librosa.load(
@@ -179,9 +243,14 @@ def process_video(video_path: Path, output_path: Path):
         sr=DEFAULT_SAMPLE_RATE,
     )
 
+    if waveform.size == 0:
+        raise ValueError(f"Extracted audio is empty: {video_path}")
+
     # -----------------------
-    # Mel Spectrogram
+    # Mel spectrogram
     # -----------------------
+    # Preserved from the original pipeline. This result is currently
+    # not used as the saved feature representation.
 
     _ = librosa.feature.melspectrogram(
         y=waveform,
@@ -190,7 +259,7 @@ def process_video(video_path: Path, output_path: Path):
     )
 
     # -----------------------
-    # Wav2Vec2
+    # Wav2Vec2 feature extraction
     # -----------------------
 
     processor, model = _get_wav2vec2()
@@ -208,7 +277,7 @@ def process_video(video_path: Path, output_path: Path):
     hidden_states = outputs.last_hidden_state
 
     # -----------------------
-    # Mean Pooling
+    # Mean pooling
     # -----------------------
 
     feature_vector = hidden_states.mean(dim=1)
@@ -219,17 +288,18 @@ def process_video(video_path: Path, output_path: Path):
     )
 
     # -----------------------
-    # Clean up temp audio
+    # Clean up temporary audio
     # -----------------------
 
-    # Only remove it after the feature has been saved successfully -
-    # if anything above raised, the WAV stays on disk so a resumed run
-    # can reuse it instead of re-decoding the video from scratch.
     if DELETE_TEMP_AUDIO_AFTER_EXTRACTION:
         try:
             audio_path.unlink(missing_ok=True)
         except OSError:
-            logger.warning("Could not delete temp audio file %s", audio_path, exc_info=True)
+            logger.warning(
+                "Could not delete temporary audio file %s",
+                audio_path,
+                exc_info=True,
+            )
 
 
 # ------------------------------------------------------------
@@ -237,13 +307,20 @@ def process_video(video_path: Path, output_path: Path):
 # ------------------------------------------------------------
 
 def process_directory():
-
+    """Extract audio features for every supported video in the dataset."""
     OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
     video_files = []
 
-    scan_roots = ([INPUT_FOLDER / source / "c23" / "videos" for source, _label in FFPP_SOURCES]
-                  if DATASET_NAME == "ffpp" else [INPUT_FOLDER])
+    scan_roots = (
+        [
+            INPUT_FOLDER / source / "c23" / "videos"
+            for source, _label in FFPP_SOURCES
+        ]
+        if DATASET_NAME == "ffpp"
+        else [INPUT_FOLDER]
+    )
+
     for scan_root in scan_roots:
         for ext in SUPPORTED_EXTENSIONS:
             video_files.extend(scan_root.rglob(f"*{ext}"))
@@ -253,8 +330,6 @@ def process_directory():
     logger.info("Found %d videos", len(video_files))
 
     for video_path in tqdm(video_files):
-
-        # Preserve folder structure
         relative_path = video_path.relative_to(INPUT_FOLDER)
         output_path = OUTPUT_FOLDER / relative_path.with_suffix(".npy")
 
@@ -273,9 +348,7 @@ def process_directory():
 # ------------------------------------------------------------
 
 def main():
-
     configure_logging()
-
     process_directory()
 
 

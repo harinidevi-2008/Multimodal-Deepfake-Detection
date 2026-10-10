@@ -548,6 +548,7 @@ def run_full_inference(
     evidence_generation_seconds = time.monotonic() - evidence_started
 
     return {
+        "trained_fusion_fake_probability": round(final_fake_probability, 4),
         "final_fake_probability": round(final_fake_probability, 4),
         "final_real_probability": round(final_real_probability, 4),
         "prediction": prediction,

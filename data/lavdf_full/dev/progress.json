@@ -1,0 +1,35 @@
+{
+  "dataset_root": "C:\\Deepfake_Detection\\Multimodal-Deepfake-Detection\\datasets\\LAV-DF\\complete_extract\\LAV-DF",
+  "split": "dev",
+  "videos_selected": 31501,
+  "last_completed_index": 3550,
+  "last_video": "015847.mp4",
+  "streams": {
+    "visual": {
+      "created": 3550,
+      "skipped": 0,
+      "failed": 0
+    },
+    "audio": {
+      "created": 3550,
+      "skipped": 0,
+      "failed": 0
+    },
+    "blink": {
+      "created": 3550,
+      "skipped": 0,
+      "failed": 0
+    },
+    "lipsync": {
+      "created": 3550,
+      "skipped": 0,
+      "failed": 0
+    },
+    "semantic": {
+      "created": 3550,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "updated_unix_time": 1791609853.0042927
+}

@@ -16,7 +16,7 @@ export default function TechnicalDetails({ result }) {
       <div className="card__header">
         <div>
           <div className="card__title">Advanced diagnostics</div>
-          <div className="card__subtitle">Calibrated threshold, timing, and per-modality contribution</div>
+          <div className="card__subtitle">Trained model threshold, timing, and per-modality contribution</div>
         </div>
       </div>
 
@@ -28,12 +28,18 @@ export default function TechnicalDetails({ result }) {
               <span className="kv-row__value">{formatSeconds(processing_time_seconds)}</span>
             </div>
             <div className="kv-row">
-              <span className="kv-row__key">Final fake probability</span>
-              <span className="kv-row__value">{toPercent(result.final_fake_probability, 1)}</span>
+              <span className="kv-row__key">Trained 5-stream Fusion</span>
+              <span className="kv-row__value">{result.trained_fusion_fake_probability == null ? 'Not available' : toPercent(result.trained_fusion_fake_probability, 1)}</span>
             </div>
+            {result.trained_fusion_fake_probability == null && (
+              <div className="kv-row">
+                <span className="kv-row__key">Reason</span>
+                <span className="kv-row__value">audio feature unavailable</span>
+              </div>
+            )}
             <div className="kv-row">
               <span className="kv-row__key">Calibrated threshold</span>
-              <span className="kv-row__value">{toPercent(decisionThreshold, 1)}</span>
+              <span className="kv-row__value">{decisionThreshold == null ? 'Not available' : toPercent(decisionThreshold, 1)}</span>
             </div>
             {thresholdSource && (
               <div className="kv-row">

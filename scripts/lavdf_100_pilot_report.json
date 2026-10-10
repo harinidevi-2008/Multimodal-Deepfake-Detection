@@ -1,0 +1,33 @@
+{
+  "dataset_root": "C:\\LAV-DF\\dev",
+  "videos_selected": 100,
+  "elapsed_seconds": 838.69,
+  "streams": {
+    "visual": {
+      "created": 100,
+      "skipped": 0,
+      "failed": 0
+    },
+    "audio": {
+      "created": 100,
+      "skipped": 0,
+      "failed": 0
+    },
+    "blink": {
+      "created": 80,
+      "skipped": 20,
+      "failed": 0
+    },
+    "lipsync": {
+      "created": 80,
+      "skipped": 20,
+      "failed": 0
+    },
+    "semantic": {
+      "created": 80,
+      "skipped": 20,
+      "failed": 0
+    }
+  },
+  "failures": []
+}
