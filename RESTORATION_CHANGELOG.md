@@ -98,3 +98,31 @@ git push -u origin integration_changes
 - The attention checkpoint, classifier checkpoints and feature files are not in the repository, so `inference/full_pipeline.py` still raises `MissingCheckpointError` until they are present.
 - Verify the three flagged bibliographic and dataset points in section 6 before submission.
 - Decide on the two items in section 4 (semantic threshold, calibrated decision threshold).
+
+## 11. Follow-up verification (2026-10-10)
+
+The requested `C:\Deepfake_Detection\Multimodal-Deepfake-Detection` path does not
+exist in this environment; work was performed in
+`D:\Deepfake_Detection\Multimodal-Deepfake-Detection`. The branch reported at initial
+inspection was `codex_three_stream`; final review reported `integration_changes`. No
+branch-switch command was issued during this task. Existing unrelated work was kept.
+
+The active inference path is three-stream (visual, audio, semantic). The serializer
+now validates `final_fake_probability`, returns it directly as
+`overall_fake_likelihood`, and no longer calls the stale modality aggregation setup.
+The results panel now formats the existing `fakeLikelihood` only when `hasScore` is
+true, with an unavailable fallback. Blink and lip-sync remain supplementary.
+
+Focused serializer regressions (10 passed), the serializer smoke check, both
+three-stream pipeline/UI smoke checks, Python compilation, and the frontend production
+build passed in this follow-up; exact commands and results are recorded in
+`TEST_REPORT.md`. The protected audio file was not edited. Its final working-tree
+SHA-256 is `f77e20007ef936d24f74112809977040e220744cf225bedcc1a1c1d4249eb3eb`, while
+the tracked `HEAD` blob matches the supplied expected SHA-256. Git has
+`core.autocrlf=true`, so its line-ending conversion explains the byte-level mismatch
+without a normalized Git diff. The initial working-tree hash observed in this session
+was also different (`e53b43a21d9c2646f89916ba01b228ecd013642372b62604ac3ab67fa873e767`);
+the working-tree file was left in place rather than rewritten.
+# Follow-up: API modality handling (2026-10-12)
+
+`api/pipeline_adapter.py` now routes an absent audio feature file to the existing standalone visual and semantic classifiers, without fabricating an audio vector or invoking the three-stream fusion checkpoint. It skips lip-sync extraction without audio and tolerates missing blink feature output in that branch. `api/serializer.py` now carries a deliberately unavailable fusion score through as `fusion_status: unavailable` and `partial_analysis: true`, with an `UNAVAILABLE` verdict. The overall result panel explains that state. No risk bands or ablation support were added: the checked threshold artifact only defines binary decision thresholds, and this workspace has no ablation script to extend. See the dated follow-up in `TEST_REPORT.md` for actual checks and failures.

@@ -374,15 +374,18 @@ def _run_no_audio_inference(job, blink_events, video_path, lipsync_result):
     require_file(str(REPO_ROOT / DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS), "semantic classifier checkpoint")
     visual = load_feature_vector(job.feature_path(job.visual_root), "visual")
     semantic = load_feature_vector(job.feature_path(job.semantic_root), "semantic")
-    blink = load_feature_vector(job.feature_path(job.blink_root), "blink")
+    try:
+        blink = load_feature_vector(job.feature_path(job.blink_root), "blink")
+    except (FileNotFoundError, ValueError):
+        blink = None
     visual_probability = load_single_stream_probability(
         visual, str(REPO_ROOT / DEFAULT_VISUAL_CLASSIFIER_WEIGHTS), 1280
     )
     semantic_probability = load_single_stream_probability(
         semantic, str(REPO_ROOT / DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS), 384
     )
-    blink_score = float(blink[3])
-    blink_status = _blink_status(blink_score)
+    blink_score = float(blink[3]) if blink is not None else None
+    blink_status = _blink_status(blink_score) if blink_score is not None else "Unavailable"
     lipsync_score = None
     lipsync_status = "unavailable"
     window_evidence = "NOT AVAILABLE: no audio stream is available for lip-sync analysis."
@@ -406,7 +409,7 @@ def _run_no_audio_inference(job, blink_events, video_path, lipsync_result):
         "visual_fake_probability": round(visual_probability, 4),
         "audio_fake_probability": None,
         "semantic_fake_probability": round(semantic_probability, 4),
-        "blink_anomaly_score": round(blink_score, 4),
+        "blink_anomaly_score": round(blink_score, 4) if blink_score is not None else None,
         "blink_status": blink_status,
         "lip_sync_mismatch_score": round(lipsync_score, 4) if lipsync_score is not None else None,
         "lip_sync_status": lipsync_status,
@@ -424,7 +427,7 @@ def _run_no_audio_inference(job, blink_events, video_path, lipsync_result):
             "visual": {"valid": True, "status": "valid"},
             "audio": {"valid": False, "status": "missing"},
             "semantic": {"valid": True, "status": "valid"},
-            "blink": {"valid": True, "status": "valid"},
+            "blink": {"valid": blink_score is not None, "status": "valid" if blink_score is not None else "missing"},
             "lipsync": {"valid": False, "status": "unavailable"},
         },
     }
@@ -485,11 +488,13 @@ def _run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) 
     stage_started = time.monotonic()
     _emit_progress(progress_callback, "extracting_lipsync", "Analyzing lip synchronization")
     logger.info("[5/7] Lip-sync analysis...")
-    try:
-        lipsync_result = _extract_lipsync(video_path, job)
-    except Exception as exc:  # supplementary analyzer cannot fail the learned result
-        logger.warning("Supplementary lip-sync analysis unavailable: %s", exc)
-        lipsync_result = None
+    lipsync_result = None
+    audio_feature_available = job.feature_path(job.audio_root).is_file()
+    if audio_feature_available:
+        try:
+            lipsync_result = _extract_lipsync(video_path, job)
+        except Exception as exc:  # supplementary analyzer cannot fail the learned result
+            logger.warning("Supplementary lip-sync analysis unavailable: %s", exc)
     logger.info("[5/7] Lip-sync analysis completed in %.3fs", time.monotonic() - stage_started)
 
     feature_health_report = {
@@ -507,23 +512,26 @@ def _run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) 
         logger.info("[6/7] Loading checkpoints...")
         _emit_progress(progress_callback, "running_fusion", "Combining visual, audio, and semantic results")
         logger.info("[7/7] Running fusion inference...")
-        result = run_full_inference(
-            str(RELATIVE_FEATURE_PATH),
-            visual_root=str(job.visual_root),
-            audio_root=str(job.audio_root),
-            semantic_root=str(job.semantic_root),
-            blink_root=str(job.blink_root),
-            lipsync_root=str(job.lipsync_root),
-            visual_classifier_weights=str(REPO_ROOT / DEFAULT_VISUAL_CLASSIFIER_WEIGHTS),
-            audio_classifier_weights=str(REPO_ROOT / DEFAULT_AUDIO_CLASSIFIER_WEIGHTS),
-            semantic_classifier_weights=str(REPO_ROOT / DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS),
-            fusion_weights=str(REPO_ROOT / DEFAULT_FUSION_WEIGHTS),
-            thresholds_path=str(DEFAULT_THRESHOLDS_PATH),
-            video_path=str(video_path),
-            frame_output_dir=str(job.evidence_dir),
-            blink_events=blink_events,
-            precomputed_lipsync_result=lipsync_result,
-        )
+        if not audio_feature_available:
+            result = _run_no_audio_inference(job, blink_events, video_path, lipsync_result)
+        else:
+            result = run_full_inference(
+                str(RELATIVE_FEATURE_PATH),
+                visual_root=str(job.visual_root),
+                audio_root=str(job.audio_root),
+                semantic_root=str(job.semantic_root),
+                blink_root=str(job.blink_root),
+                lipsync_root=str(job.lipsync_root),
+                visual_classifier_weights=str(REPO_ROOT / DEFAULT_VISUAL_CLASSIFIER_WEIGHTS),
+                audio_classifier_weights=str(REPO_ROOT / DEFAULT_AUDIO_CLASSIFIER_WEIGHTS),
+                semantic_classifier_weights=str(REPO_ROOT / DEFAULT_SEMANTIC_CLASSIFIER_WEIGHTS),
+                fusion_weights=str(REPO_ROOT / DEFAULT_FUSION_WEIGHTS),
+                thresholds_path=str(DEFAULT_THRESHOLDS_PATH),
+                video_path=str(video_path),
+                frame_output_dir=str(job.evidence_dir),
+                blink_events=blink_events,
+                precomputed_lipsync_result=lipsync_result,
+            )
         logger.info("[6/7] Loading checkpoints completed in %.3fs", time.monotonic() - stage_started)
         logger.info("[7/7] Running fusion inference completed in %.3fs", time.monotonic() - stage_started)
         timings = result.get("_inference_timing_seconds", {})
@@ -588,6 +596,8 @@ def _run_raw_video_analysis(video_path: Path, job: Job, progress_callback=None) 
             "modality": "audio", "missing": True, "valid": False,
             "status": "missing", "shape": None, "dtype": None,
         }
+        result["_audio_evidence"] = {"status": "unavailable", "reason": "No audio stream detected"}
+    elif not audio_feature_available and result.get("_audio_evidence") is None:
         result["_audio_evidence"] = {"status": "unavailable", "reason": "No audio stream detected"}
     _emit_progress(progress_callback, "completed", "Analysis complete")
 

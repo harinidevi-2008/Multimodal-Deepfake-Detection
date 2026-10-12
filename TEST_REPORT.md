@@ -42,3 +42,34 @@ None of the checks that were run failed.
 ## Not tested
 
 The behaviour of the real trained `best_enhanced_fusion_model_attention.pt` checkpoint was not exercised, because it is not in the repository. The equivalence test above shows that a checkpoint containing the old gate parameters loads and gives identical output, but it uses random weights.
+
+## Follow-up verification (2026-10-10)
+
+These results were first run when the active branch was `codex_three_stream`; the
+final review reported `integration_changes`. No branch-switch command was issued by
+this task, so the branch changed during the work session. The final focused regression
+run and source checks completed after that change.
+
+| Check | Command | Result |
+|-------|---------|--------|
+| Serializer regression coverage | `.\\.venv\\Scripts\\python.exe -m pytest api\\test_fake_probability_regression.py -q` | 10 passed |
+| Serializer contract smoke | `.\\.venv\\Scripts\\python.exe api\\test_serializer_smoke.py` | exit 0 |
+| Three-stream checkpoint and UI smoke | `.\\.venv\\Scripts\\python.exe inference\\test_full_pipeline_smoke.py` | 2 passed |
+| Python compilation of modified Python files | `.\\.venv\\Scripts\\python.exe -m py_compile api\\serializer.py api\\test_fake_probability_regression.py api\\test_serializer_smoke.py` | exit 0 |
+| Frontend production build | `npm run build` (from `frontend`) | passed; Vite 5.4.21 built 48 modules |
+| Obsolete serializer aggregation search | `rg -n "aggregate_learned_fake_probabilities|learned_reliability|learned_scores" api\\serializer.py` | no matches |
+| Undefined frontend variable search | `rg -n "fakePct" frontend\\src\\components\\OverallResultPanel.jsx` | no matches after the follow-up fix |
+| Protected audio file | `Get-FileHash audio/src/audio_stream.py -Algorithm SHA256` and `git diff -- audio/src/audio_stream.py` | working-tree SHA-256 `f77e20007ef936d24f74112809977040e220744cf225bedcc1a1c1d4249eb3eb`; normalized Git diff empty; HEAD blob SHA-256 matches expected `d69af70b7d553abf8034c31d06216dd9a9fa938215085cc6367b5c3955973893`; `core.autocrlf=true` converts line endings |
+
+No frontend test framework is configured in `frontend/package.json`; the existing
+three-stream smoke test checks the three primary modality cards and supplementary
+section placement. The audio working-tree hash observed at task start was
+`e53b43a21d9c2646f89916ba01b228ecd013642372b62604ac3ab67fa873e767`; it later read
+`f77e20007ef936d24f74112809977040e220744cf225bedcc1a1c1d4249eb3eb`. The file was
+not edited by this task or rewritten to force a hash match. No real-checkpoint or
+real-video end-to-end inference was run.
+# Follow-up implementation check (2026-10-12)
+
+This follow-up preserves the report above as historical output. Changes in this task were checked with `python -m compileall -q api` (passed) and `npm run build` from `frontend/` (passed). The Python regression, serializer smoke, and backend tests could not run because `pytest` is not installed in the active Python 3.11 environment (`No module named pytest`). Running npm at repository root also failed because the package manifest is under `frontend/`; the correct frontend build then passed.
+
+The no-audio adapter branch now selects the independent visual and semantic classifiers and leaves fusion unavailable; the serializer accepts and exposes a null fusion score as unavailable. Lip-sync extraction is skipped when the audio feature file was not produced. Full modality-failure handling, three-level risk bands, and ablation execution remain incomplete and are not covered by this check.

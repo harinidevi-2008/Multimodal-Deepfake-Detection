@@ -35,7 +35,9 @@ export default function OverallResultPanel({ result }) {
             {hasScore ? toPercent(fakeLikelihood, 0) : 'Unavailable'}
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
-            This is the combined score from the visual, audio, and semantic analyses. It is a model score, not proof of a specific altered moment.
+            {hasScore
+              ? 'This is the combined score from the visual, audio, and semantic analyses. It is a model score, not proof of a specific altered moment.'
+              : 'A validated three-stream fusion prediction is unavailable for this analysis.'}
           </p>
         </div>
       </div>

@@ -225,7 +225,11 @@ def _modality_explanations(result, blink_status, lip_sync_status):
 
 
 def _build_contextual_analysis(result, evidence_report, lip_sync_status, blink_status):
-    final_verdict = "likely deepfake" if result.get("prediction") == "DEEPFAKE" else "likely real"
+    final_verdict = (
+        "likely deepfake" if result.get("prediction") == "DEEPFAKE"
+        else "likely real" if result.get("prediction") == "REAL"
+        else "unavailable"
+    )
     audio_missing_reason = (
         (result.get("_audio_evidence") or {}).get("reason")
         or result.get("_no_audio_reason")
@@ -308,7 +312,11 @@ def _build_contextual_analysis(result, evidence_report, lip_sync_status, blink_s
             f"Evidence consistency is {consistency.lower()} and modality disagreement is {disagreement.lower()}. "
             "The final fusion probability comes directly from the three-stream model and is independent of the displayed modality probabilities."
         ),
-        "overall_interpretation": f"The three learned streams classified this video as {final_verdict}. Blink and lip-sync checks are supplementary and do not contribute to the final score or verdict.",
+        "overall_interpretation": (
+            f"The three learned streams classified this video as {final_verdict}. Blink and lip-sync checks are supplementary and do not contribute to the final score or verdict."
+            if result.get("prediction") in ("DEEPFAKE", "REAL")
+            else "A validated three-stream fusion prediction is unavailable. Blink and lip-sync checks are supplementary and do not contribute to a primary verdict."
+        ),
         "semantic_context": {
             "language": semantic.get("language", "unknown"),
             "transcript": semantic.get("transcript", ""),
@@ -346,8 +354,11 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
             details="The backend did not return the required scoring fields.",
         )
     final_probability = result.get("final_fake_probability")
-    if (isinstance(final_probability, bool) or not isinstance(final_probability, Real)
-            or not math.isfinite(final_probability) or not 0 <= final_probability <= 1):
+    fusion_available = (
+        not isinstance(final_probability, bool) and isinstance(final_probability, Real)
+        and math.isfinite(final_probability) and 0 <= final_probability <= 1
+    )
+    if not fusion_available and final_probability is not None:
         raise InferenceFailedError(
             "Inference returned an invalid final fake probability.",
             details="The final fusion probability must be a finite number between 0 and 1.",
@@ -475,12 +486,18 @@ def serialize_result(result, meta, job_id, video_filename, processing_time_secon
         "video_duration_seconds": meta.get("duration_seconds"),
         "analyzed_at": analyzed_at,
         "processing_time_seconds": round(processing_time_seconds, 3),
-        "final_verdict": "LIKELY_DEEPFAKE" if result["prediction"] == "DEEPFAKE" else "LIKELY_REAL",
+        "final_verdict": (
+            "LIKELY_DEEPFAKE" if result.get("prediction") == "DEEPFAKE"
+            else "LIKELY_REAL" if result.get("prediction") == "REAL"
+            else "UNAVAILABLE"
+        ),
         "prediction": result["prediction"],
         "final_fake_probability": final_probability,
         "overall_fake_likelihood": final_probability,
         "final_real_probability": result["final_real_probability"],
         "decision_threshold": result.get("decision_threshold"),
+        "fusion_status": "available" if fusion_available else "unavailable",
+        "partial_analysis": not fusion_available,
         "model_confidence_note": MODEL_CONFIDENCE_NOTE,
         "modalities": modalities,
         "supplementary_consistency": result.get(
